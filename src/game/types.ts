@@ -139,6 +139,8 @@ export interface GameState {
   order: string[];
   /** Dono da vez atual. */
   active: string;
+  /** Quem abriu a partida: a volta sobe quando a vez passa de novo por esse lugar da mesa. */
+  starter: string;
   phase: Phase;
   players: Record<string, PlayerState>;
   /** Momento (ms) em que a decisão atual vence: o tempo acaba ou o bot age. */

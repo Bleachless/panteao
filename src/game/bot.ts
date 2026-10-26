@@ -1,5 +1,5 @@
 import { card } from "./cards";
-import { blocks, damageFor, HAND_MAX } from "./engine";
+import { blocks, damageFor, HAND_MAX, MAX_BOOSTERS } from "./engine";
 import type { CardDef, CardInst, GameAction, GameState, PendingAttack, PlayerState } from "./types";
 
 // Os bots jogam só com o que um jogador de verdade veria: a própria mão e o que está na mesa.
@@ -73,7 +73,10 @@ function attackPlan(s: GameState, p: PlayerState, hand: Hand): GameAction | null
 
   // Reforços: usa quando o alvo está ao alcance ou quando sobra mão.
   if (best.action.type === "atacar") {
-    const boosters = hand.filter((h) => h.def.kind === "reforco");
+    const boosters = hand
+      .filter((h) => h.def.kind === "reforco")
+      .sort((a, b) => (b.def.boost ?? 0) - (a.def.boost ?? 0))
+      .slice(0, MAX_BOOSTERS);
     const weapon = card(hand.find((h) => h.inst.uid === (best.action as { weapon: string }).weapon)!.inst.id);
     const base = weapon.attack ?? 0;
     const add = boosters.reduce((sum, b) => sum + (b.def.boost ?? 0), 0);

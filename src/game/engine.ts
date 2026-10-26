@@ -22,11 +22,13 @@ export const MAX_STAT = 99;
 export const START = { vida: 36, fe: 10, ouro: 20 } as const;
 export const POISON_DAMAGE = 2;
 export const SHOP_OFFER = 3;
+/** Quantos reforços cabem num golpe. */
+export const MAX_BOOSTERS = 2;
 export const LOG_LIMIT = 80;
 /** A partir desta volta começa o Crepúsculo: todo deus perde Vida no começo da vez, cada vez mais. */
 export const TWILIGHT_ROUND = 8;
 /** Quanto um bot "pensa" antes de agir, para dar tempo de ver a jogada dele. */
-export const BOT_DELAY = { acao: 1500, defesa: 1100, mercado: 1100 } as const;
+export const BOT_DELAY = { acao: 1900, defesa: 1500, mercado: 1400 } as const;
 export const DEFAULT_SETTINGS: GameSettings = { actionSeconds: 40, defenseSeconds: 25 };
 
 export class GameError extends Error {}
@@ -80,6 +82,7 @@ export function createGame(
     round: 1,
     order: players.map((p) => p.id),
     active: players[0].id,
+    starter: players[0].id,
     phase: { type: "acao", player: players[0].id },
     players: {},
     deadline: null,
@@ -94,6 +97,7 @@ export function createGame(
     give(s, s.players[p.id], HAND_SIZE);
   }
   const first = opts.first ?? s.order[Math.floor(random(s) * s.order.length)];
+  s.starter = first;
   log(s, { kind: "info", text: "Os deuses descem à arena." });
   beginTurn(s, first, opts.now);
   return s;
@@ -217,7 +221,10 @@ function endTurn(s: GameState, now: number) {
   }
   if (checkOver(s)) return;
   const next = othersFrom(s, s.active)[0];
-  if (s.order.indexOf(next) <= s.order.indexOf(s.active)) s.round++;
+  // Posições contadas a partir de quem abriu a partida (funciona mesmo se essa pessoa já caiu).
+  const n = s.order.length;
+  const seat = (id: string) => (s.order.indexOf(id) - s.order.indexOf(s.starter) + n) % n;
+  if (seat(next) <= seat(s.active)) s.round++;
   beginTurn(s, next, now);
 }
 
@@ -351,6 +358,7 @@ function attackWith(s: GameState, p: PlayerState, a: Extract<GameAction, { type:
   const weapon = card(weaponInst.id);
   if (weapon.kind !== "arma") throw new GameError(`${weapon.name} não é uma arma.`);
   const boosterIds = a.boosters ?? [];
+  if (boosterIds.length > MAX_BOOSTERS) throw new GameError(`No máximo ${MAX_BOOSTERS} reforços por golpe.`);
   if (new Set([a.weapon, ...boosterIds]).size !== boosterIds.length + 1) throw new GameError("Carta repetida.");
   const boosters = boosterIds.map((uid) => card(findInHand(p, uid).id));
   for (const b of boosters) if (b.kind !== "reforco") throw new GameError(`${b.name} não é um reforço.`);
@@ -389,7 +397,7 @@ function targetOther(s: GameState, p: PlayerState, target: string | undefined): 
   return t;
 }
 
-function useCard(s: GameState, p: PlayerState, a: Extract<GameAction, { type: "usar" }>, now: number) {
+function playCard(s: GameState, p: PlayerState, a: Extract<GameAction, { type: "usar" }>, now: number) {
   const inst = findInHand(p, a.card);
   const def = card(inst.id);
   const effect = def.effect;
@@ -545,7 +553,7 @@ export function applyAction(state: GameState, pid: string, action: GameAction, n
           attackWith(s, p, action, now);
           break;
         case "usar":
-          useCard(s, p, action, now);
+          playCard(s, p, action, now);
           break;
         case "vender":
           sell(s, p, action, now);

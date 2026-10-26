@@ -166,6 +166,12 @@ describe("golpes e defesas", () => {
     expect(s.players.p1.hand).toHaveLength(0);
   });
 
+  it("aceita no máximo dois reforços", () => {
+    const s = setup();
+    const [lanca, a, b, c] = rig(s, "p1", ["lanca", "furia", "bencao", "furia"]);
+    expect(() => act(s, "p1", { type: "atacar", weapon: lanca, boosters: [a, b, c], target: "p2" })).toThrow(/reforços/);
+  });
+
   it("só aceita uma arma com reforços de verdade", () => {
     const s = setup();
     const [lanca, escudo] = rig(s, "p1", ["lanca", "escudo"]);
@@ -227,6 +233,19 @@ describe("golpes e defesas", () => {
 describe("Crepúsculo", () => {
   it("começa na volta 8 e aperta a cada volta", () => {
     expect([1, 7, 8, 9, 12].map(twilightDamage)).toEqual([0, 0, 1, 2, 5]);
+  });
+
+  it("a volta conta a partir de quem abriu a partida", () => {
+    let s = createGame(
+      ["p1", "p2", "p3"].map((id) => ({ id, name: id, bot: false })),
+      { seed: 1, now: 0, first: "p2" },
+    );
+    s = act(s, "p2", { type: "orar" });
+    s = act(s, "p3", { type: "orar" });
+    expect(s.round).toBe(1);
+    s = act(s, "p1", { type: "orar" });
+    expect(s.round).toBe(2);
+    expect(s.active).toBe("p2");
   });
 
   it("conta as voltas e tira Vida no começo da vez", () => {

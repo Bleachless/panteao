@@ -1,26 +1,237 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
+/* Panteão: céu de meia-noite, relíquias douradas e vidro fosco. */
+@theme {
+  --color-night: #060918;
+  --color-night-2: #0b1030;
+  --color-ink: #e9e6f5;
+  --color-mute: #9aa0c3;
+  --color-faint: #5d6390;
+  --color-gold: #e8c26a;
+  --color-gold-hi: #f8e2a2;
+  --color-gold-lo: #9c7630;
+  --color-vida: #ff5c7a;
+  --color-fe: #79a8ff;
+  --color-ouro: #f2c14e;
+  --color-neutro: #d9c49c;
+  --color-fogo: #ff6b3d;
+  --color-mar: #33b8ff;
+  --color-vento: #6ff0c0;
+  --color-luz: #ffe27a;
+  --color-abismo: #a874ff;
+
+  --font-display: var(--font-cinzel), ui-serif, Georgia, serif;
+  --font-sans: var(--font-outfit), ui-sans-serif, system-ui, sans-serif;
+
+  --animate-rise: rise 0.45s cubic-bezier(0.2, 0.9, 0.3, 1.2) both;
+  --animate-float-up: float-up 1.4s ease-out forwards;
+  --animate-shake: shake 0.5s ease-in-out;
+  --animate-glow: glow 2.4s ease-in-out infinite;
+  --animate-shimmer: shimmer 3.2s linear infinite;
+  --animate-pop: pop 0.35s cubic-bezier(0.2, 0.9, 0.3, 1.4) both;
+  --animate-twinkle: twinkle 6s ease-in-out infinite;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(24px) scale(0.92);
+  }
+  to {
+    opacity: 1;
+    transform: none;
   }
 }
 
+@keyframes float-up {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, 0) scale(0.6);
+  }
+  15% {
+    opacity: 1;
+    transform: translate(-50%, -12px) scale(1.15);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -64px) scale(1);
+  }
+}
+
+@keyframes shake {
+  0%,
+  100% {
+    transform: none;
+  }
+  20% {
+    transform: translateX(-6px) rotate(-1deg);
+  }
+  40% {
+    transform: translateX(5px) rotate(1deg);
+  }
+  60% {
+    transform: translateX(-4px);
+  }
+  80% {
+    transform: translateX(3px);
+  }
+}
+
+@keyframes glow {
+  0%,
+  100% {
+    box-shadow: 0 0 0 1px color-mix(in oklab, var(--glow, var(--color-gold)) 60%, transparent), 0 0 18px -2px color-mix(in oklab, var(--glow, var(--color-gold)) 55%, transparent);
+  }
+  50% {
+    box-shadow: 0 0 0 1px var(--glow, var(--color-gold)), 0 0 34px 2px color-mix(in oklab, var(--glow, var(--color-gold)) 65%, transparent);
+  }
+}
+
+@keyframes shimmer {
+  from {
+    background-position: 0% 50%;
+  }
+  to {
+    background-position: 200% 50%;
+  }
+}
+
+@keyframes pop {
+  from {
+    opacity: 0;
+    transform: scale(0.6);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes twinkle {
+  0%,
+  100% {
+    opacity: 0.55;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+@keyframes drift {
+  from {
+    transform: translate3d(0, 0, 0);
+  }
+  to {
+    transform: translate3d(-120px, -60px, 0);
+  }
+}
+
+html {
+  color-scheme: dark;
+  background: var(--color-night);
+  -webkit-tap-highlight-color: transparent;
+}
+
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--color-night);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+}
+
+/* O céu: duas nebulosas e duas camadas de estrelas feitas só com gradientes. */
+.sky {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  overflow: hidden;
+  background:
+    radial-gradient(60% 50% at 15% 10%, #2a1f6b55, transparent 70%),
+    radial-gradient(50% 45% at 90% 30%, #5b1d6d40, transparent 70%),
+    radial-gradient(70% 60% at 50% 110%, #0f3a6a50, transparent 70%),
+    linear-gradient(180deg, #070a1d 0%, #060918 60%, #04060f 100%);
+}
+
+.sky::before,
+.sky::after {
+  content: "";
+  position: absolute;
+  inset: -120px;
+  background-image:
+    radial-gradient(1px 1px at 20px 30px, #fff 60%, transparent),
+    radial-gradient(1px 1px at 140px 80px, #ffe9b8 60%, transparent),
+    radial-gradient(1.5px 1.5px at 60px 160px, #cfd8ff 60%, transparent),
+    radial-gradient(1px 1px at 200px 190px, #fff 60%, transparent),
+    radial-gradient(1px 1px at 250px 40px, #fff 60%, transparent),
+    radial-gradient(1.5px 1.5px at 300px 130px, #fff2c9 60%, transparent);
+  background-size: 320px 220px;
+  opacity: 0.7;
+  animation: drift 120s linear infinite alternate;
+}
+
+.sky::after {
+  background-size: 520px 380px;
+  opacity: 0.45;
+  animation-duration: 200s;
+  animation-direction: alternate-reverse;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sky::before,
+  .sky::after {
+    animation: none;
+  }
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* Vidro fosco com fio dourado. */
+.glass {
+  background: linear-gradient(160deg, rgba(255, 255, 255, 0.07), rgba(255, 255, 255, 0.02));
+  border: 1px solid rgba(232, 194, 106, 0.18);
+  backdrop-filter: blur(14px) saturate(1.2);
+  -webkit-backdrop-filter: blur(14px) saturate(1.2);
+}
+
+.gold-text {
+  background: linear-gradient(100deg, var(--color-gold-lo), var(--color-gold-hi) 30%, var(--color-gold) 50%, var(--color-gold-hi) 70%, var(--color-gold-lo));
+  background-size: 200% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.gold-text.animate {
+  animation: shimmer 6s linear infinite;
+}
+
+.btn-gold {
+  background: linear-gradient(180deg, #f6dc95, #d8a94e 55%, #b98a35);
+  color: #1d1406;
+  box-shadow: inset 0 1px 0 #fff6d6, 0 6px 20px -6px #e8c26a99;
+}
+
+.btn-gold:hover {
+  filter: brightness(1.07);
+}
+
+.btn-gold:disabled {
+  filter: grayscale(0.7) brightness(0.7);
+  box-shadow: none;
+}
+
+.scrollbar-none {
+  scrollbar-width: none;
+}
+
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
+}
+
+.safe-bottom {
+  padding-bottom: max(0.75rem, env(safe-area-inset-bottom));
 }
