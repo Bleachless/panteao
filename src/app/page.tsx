@@ -1,10 +1,10 @@
-import { BookOpen, Coins, Hourglass, Shield, Sparkles, Sword } from "lucide-react";
+import { Bird, BookOpen, Coins, Flame, Hourglass, Orbit, Shield, Sparkles, Sword } from "lucide-react";
 import Link from "next/link";
 import { ELEMENT_COLOR, ELEMENT_ICON } from "@/components/art";
 import { CardFace } from "@/components/card-face";
 import { StartPanel } from "@/components/home/start-panel";
 import { Footer, Logo } from "@/components/shell";
-import { ELEMENT_LABEL } from "@/game/cards";
+import { CARDS, ELEMENT_LABEL } from "@/game/cards";
 import { START } from "@/game/engine";
 import type { Element } from "@/game/types";
 
@@ -14,7 +14,15 @@ const STEPS = [
   { icon: Sword, title: "Ataque", text: "Na sua vez, escolha uma arma e um alvo. Até 2 reforços somam ao golpe e podem trocar o elemento." },
   { icon: Shield, title: "Defenda", text: "Quando o golpe vem em você, junte quantas defesas quiser. O dano é o golpe menos a defesa." },
   { icon: Sparkles, title: "Milagres", text: "Gastam Fé e voltam para a mão: cura, raios, silêncio e até furto de cartas." },
-  { icon: Coins, title: "Trocas", text: "Compre relíquias no Mercado Celeste, venda o que sobra e pese Vida, Fé e Ouro na Alquimia." },
+  { icon: Coins, title: "Trocas", text: "Compre no Mercado Celeste, venda o que sobra, faça escambo com os outros deuses e pese Vida, Fé e Ouro na Alquimia." },
+];
+
+const SHOWCASE = ["hora-zero", "conjuncao", "destinos", "sentenca", "julgamento", "lua-de-sangue", "cetro-tempo"];
+
+const TWISTS = [
+  { icon: Bird, color: "var(--color-vento)", title: "Guardiões", text: "Quebre uma Ânfora Selada e um grifo, um golem ou uma serpente passa a lutar ao seu lado, agindo sozinho a cada vez sua." },
+  { icon: Flame, color: "var(--color-fogo)", title: "Céu e inferno", text: "A Graça Celeste cura toda vez, mas pode levar você ao céu de vez. A Danação queima e pode arrastar ao Tártaro." },
+  { icon: Orbit, color: "var(--color-luz)", title: "Prodígios", text: "Hora Zero deixa todo mundo com 1 de Vida. A Grande Conjunção dá um guardião a cada deus. A Troca de Destinos troca a sua Vida com a de outro." },
 ];
 
 const ELEMENTS: { el: Element; rule: string }[] = [
@@ -85,6 +93,27 @@ export default function Home() {
           </div>
         </section>
 
+        <section className="py-12" aria-labelledby="viradas">
+          <h2 id="viradas" className="font-display text-3xl font-bold text-gold-hi">
+            Cartas que viram tudo
+          </h2>
+          <p className="mt-2 max-w-2xl text-mute">Raríssimas, caras ou perigosas. Quando uma delas cai na mesa, ninguém está seguro.</p>
+          <div className="scrollbar-none -mx-5 mt-6 flex gap-4 overflow-x-auto px-5 pb-2">
+            {SHOWCASE.map((id) => (
+              <CardFace key={id} id={id} size="lg" />
+            ))}
+          </div>
+          <div className="mt-6 grid gap-4 md:grid-cols-3">
+            {TWISTS.map((t) => (
+              <div key={t.title} className="glass rounded-2xl p-5">
+                <t.icon size={24} strokeWidth={1.6} style={{ color: t.color }} />
+                <h3 className="mt-3 font-display text-lg font-bold">{t.title}</h3>
+                <p className="mt-1.5 text-sm leading-relaxed text-mute">{t.text}</p>
+              </div>
+            ))}
+          </div>
+        </section>
+
         <section className="grid gap-6 py-12 lg:grid-cols-[1fr_1fr]" aria-labelledby="elementos">
           <div>
             <h2 id="elementos" className="font-display text-3xl font-bold text-gold-hi">
@@ -118,7 +147,7 @@ export default function Home() {
               Ficou sem arma? <b className="text-ink">Ore</b>: você compra uma carta e passa a vez. Toda vez começa com a mão completa em 8 cartas.
             </p>
             <Link href="/codice" className="mt-6 inline-flex items-center gap-2 text-gold-hi underline-offset-4 hover:underline">
-              <BookOpen size={16} /> Ver todas as 45 relíquias no Códice
+              <BookOpen size={16} /> Ver todas as {CARDS.length} relíquias e os guardiões no Códice
             </Link>
           </div>
         </section>

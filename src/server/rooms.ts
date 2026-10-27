@@ -210,6 +210,10 @@ export function parseAction(raw: unknown): GameAction {
       return { type: "defender", cards: strList(a.cards) };
     case "comprar":
       return { type: "comprar", offer: a.offer ? str(a.offer) : null };
+    case "escambo":
+      return { type: "escambo", card: str(a.card), item: str(a.item), target: str(a.target), price: int(a.price) };
+    case "responder":
+      return { type: "responder", accept: a.accept === true };
     case "desistir":
       return { type: "desistir" };
     default:

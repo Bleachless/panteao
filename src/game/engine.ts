@@ -1,4 +1,4 @@
-import { card, CARDS, TOTAL_WEIGHT } from "./cards";
+import { card, CARDS, GUARDIAN_MAP, GUARDIANS, TOTAL_WEIGHT } from "./cards";
 import type {
   CardDef,
   CardInst,
@@ -7,6 +7,7 @@ import type {
   GameSettings,
   GameState,
   GameView,
+  GuardianId,
   LogEntry,
   PendingAttack,
   PlayerState,
@@ -28,7 +29,13 @@ export const LOG_LIMIT = 80;
 /** A partir desta volta começa o Crepúsculo: todo deus perde Vida no começo da vez, cada vez mais. */
 export const TWILIGHT_ROUND = 8;
 /** Quanto um bot "pensa" antes de agir, para dar tempo de ver a jogada dele. */
-export const BOT_DELAY = { acao: 1900, defesa: 1500, mercado: 1400 } as const;
+export const BOT_DELAY = { acao: 1900, defesa: 1500, mercado: 1400, proposta: 1600 } as const;
+/** Céu e inferno: a Graça cura mas pode levar ao céu; a Danação fere e pode arrastar ao Tártaro. */
+export const GRACE_HEAL = 4;
+export const GRACE_ASCEND = 0.2;
+export const DAMNATION_DAMAGE = 3;
+export const DAMNATION_DRAG = 0.15;
+export const BLOOD_MOON_BONUS = 3;
 export const DEFAULT_SETTINGS: GameSettings = { actionSeconds: 40, defenseSeconds: 25 };
 
 export class GameError extends Error {}
@@ -39,7 +46,7 @@ export interface NewPlayer {
   bot: boolean;
 }
 
-export const STATUS_LABEL: Record<StatusId, string> = { veneno: "Veneno", sono: "Sono", silencio: "Silêncio" };
+export const STATUS_LABEL: Record<StatusId, string> = { veneno: "Veneno", sono: "Sono", silencio: "Silêncio", graca: "Graça Celeste", danacao: "Danação" };
 
 // Gerador mulberry32: o estado dele mora no próprio jogo, então a mesma semente repete a mesma partida.
 export function random(s: GameState): number {
@@ -89,11 +96,13 @@ export function createGame(
     settings: { ...DEFAULT_SETTINGS, ...opts.settings },
     nextUid: 1,
     fallenCount: 0,
+    extraTurn: null,
+    phenomenon: null,
     log: [],
     logSeq: 0,
   };
   for (const p of players) {
-    s.players[p.id] = { id: p.id, name: p.name, bot: p.bot, ...START, hand: [], statuses: [], alive: true };
+    s.players[p.id] = { id: p.id, name: p.name, bot: p.bot, ...START, hand: [], statuses: [], alive: true, guardian: null };
     give(s, s.players[p.id], HAND_SIZE);
   }
   const first = opts.first ?? s.order[Math.floor(random(s) * s.order.length)];
@@ -132,12 +141,12 @@ function setDeadline(s: GameState, now: number) {
     s.deadline = null;
     return;
   }
-  const kind = s.phase.type as "acao" | "defesa" | "mercado";
+  const kind = s.phase.type as "acao" | "defesa" | "mercado" | "proposta";
   if (s.players[who].bot) {
     s.deadline = now + BOT_DELAY[kind];
     return;
   }
-  const secs = kind === "defesa" ? s.settings.defenseSeconds : s.settings.actionSeconds;
+  const secs = kind === "defesa" || kind === "proposta" ? s.settings.defenseSeconds : s.settings.actionSeconds;
   s.deadline = secs ? now + secs * 1000 : null;
 }
 
@@ -157,6 +166,7 @@ function fall(s: GameState, p: PlayerState, reason?: string) {
   p.vida = 0;
   p.hand = [];
   p.statuses = [];
+  p.guardian = null;
   p.fallen = ++s.fallenCount;
   log(s, { kind: "queda", actor: p.id, text: reason ?? `${p.name} perdeu toda a Vida e virou estrela.` });
 }
@@ -181,30 +191,51 @@ function beginTurn(s: GameState, pid: string, now: number) {
   s.turn++;
   log(s, { kind: "turno", actor: pid, text: `Vez de ${p.name}.` });
 
+  if (s.phenomenon && s.round > s.phenomenon.untilRound) {
+    log(s, { kind: "prodigio", text: "A Lua de Sangue se põe. Os golpes voltam ao normal." });
+    s.phenomenon = null;
+  }
+
+  // Cada ameaça do começo da vez pode derrubar: se derrubar, a vez passa (ou a partida acaba).
+  const falls = (reason: string) => {
+    fall(s, p, reason);
+    if (!checkOver(s)) endTurn(s, now);
+  };
+
   const twilight = twilightDamage(s.round);
   if (twilight > 0) {
     p.vida -= twilight;
     log(s, { kind: "crepusculo", target: pid, amount: twilight, text: `O Crepúsculo consome ${twilight} de Vida de ${p.name}.` });
-    if (p.vida <= 0) {
-      fall(s, p, `${p.name} foi engolido pelo Crepúsculo.`);
-      if (!checkOver(s)) endTurn(s, now);
-      return;
-    }
+    if (p.vida <= 0) return falls(`${p.name} foi engolido pelo Crepúsculo.`);
   }
 
-  if (p.statuses.some((st) => st.id === "veneno")) {
+  if (has(p, "veneno")) {
     p.vida -= POISON_DAMAGE;
     log(s, { kind: "dano", target: pid, amount: POISON_DAMAGE, text: `O veneno tira ${POISON_DAMAGE} de Vida de ${p.name}.` });
-    if (p.vida <= 0) {
-      fall(s, p, `${p.name} sucumbiu ao veneno.`);
-      if (!checkOver(s)) endTurn(s, now);
-      return;
-    }
+    if (p.vida <= 0) return falls(`${p.name} sucumbiu ao veneno.`);
+  }
+
+  if (has(p, "danacao")) {
+    p.vida -= DAMNATION_DAMAGE;
+    log(s, { kind: "dano", target: pid, amount: DAMNATION_DAMAGE, element: "abismo", text: `A Danação queima ${DAMNATION_DAMAGE} de Vida de ${p.name}.` });
+    if (p.vida <= 0) return falls(`${p.name} queimou até o fim na Danação.`);
+    if (random(s) < DAMNATION_DRAG) return falls(`Mãos do Tártaro arrastam ${p.name} para baixo!`);
+  }
+
+  if (has(p, "graca")) {
+    p.vida = cap(p.vida + GRACE_HEAL);
+    log(s, { kind: "cura", actor: pid, amount: GRACE_HEAL, text: `A Graça Celeste cura ${GRACE_HEAL} de Vida de ${p.name}.` });
+    if (random(s) < GRACE_ASCEND) return falls(`A Graça foi demais: ${p.name} sobe aos céus e não volta.`);
+  }
+
+  if (p.guardian) {
+    guardianActs(s, p);
+    if (s.phase.type === "fim") return;
   }
 
   give(s, p, Math.max(0, HAND_SIZE - p.hand.length));
 
-  if (p.statuses.some((st) => st.id === "sono")) {
+  if (has(p, "sono")) {
     log(s, { kind: "mazela", target: pid, text: `${p.name} está dormindo e perde a vez.` });
     endTurn(s, now);
     return;
@@ -214,12 +245,94 @@ function beginTurn(s: GameState, pid: string, now: number) {
   setDeadline(s, now);
 }
 
+function has(p: PlayerState, status: StatusId) {
+  return p.statuses.some((st) => st.id === status);
+}
+
+// ---------- Guardiões ----------
+
+function summon(s: GameState, p: PlayerState, id?: GuardianId) {
+  const def = id ? GUARDIAN_MAP[id] : GUARDIANS[Math.floor(random(s) * GUARDIANS.length)];
+  const replaced = p.guardian ? GUARDIAN_MAP[p.guardian.id].name : null;
+  p.guardian = { id: def.id, vida: def.vida };
+  log(s, { kind: "guardiao", actor: p.id, element: def.element, text: `${p.name} invoca ${def.name}${replaced ? ` no lugar de ${replaced}` : ""}.` });
+}
+
+function hurtGuardian(s: GameState, p: PlayerState, amount: number) {
+  if (!p.guardian || amount <= 0) return;
+  const def = GUARDIAN_MAP[p.guardian.id];
+  p.guardian.vida -= amount;
+  if (p.guardian.vida <= 0) {
+    p.guardian = null;
+    log(s, { kind: "guardiao", target: p.id, text: `${def.name} de ${p.name} se desfaz em poeira de estrela.` });
+  } else {
+    log(s, { kind: "guardiao", target: p.id, amount, text: `${def.name} de ${p.name} sofre ${amount}.` });
+  }
+}
+
+/** O Golem segura o dano que iria para o dono. Devolve quanto sobrou para o deus. */
+function golemAbsorbs(s: GameState, p: PlayerState, dmg: number): number {
+  if (dmg <= 0 || p.guardian?.id !== "golem") return dmg;
+  const taken = Math.min(dmg, p.guardian.vida);
+  log(s, { kind: "guardiao", target: p.id, amount: taken, text: `O Golem de Bronze se põe na frente e segura ${taken}.` });
+  hurtGuardian(s, p, taken);
+  return dmg - taken;
+}
+
+/** Dano direto (sem fase de defesa), como o golpe de um guardião. */
+function strike(s: GameState, target: PlayerState, amount: number, element: Element, source: string) {
+  const dmg = golemAbsorbs(s, target, amount);
+  if (dmg > 0) {
+    target.vida -= dmg;
+    log(s, { kind: "dano", target: target.id, amount: dmg, element, text: `${source} acerta ${target.name}: ${dmg} de dano.` });
+    if (target.vida <= 0) fall(s, target);
+  }
+  checkOver(s);
+}
+
+function guardianActs(s: GameState, p: PlayerState) {
+  const g = p.guardian!;
+  const def = GUARDIAN_MAP[g.id];
+  if (def.act.type === "escudo" || random(s) >= def.chance) return;
+  const enemies = othersFrom(s, p.id);
+  const enemy = enemies[Math.floor(random(s) * enemies.length)];
+  switch (def.act.type) {
+    case "golpe":
+      log(s, { kind: "guardiao", actor: p.id, target: enemy, element: def.element, text: `${def.name} de ${p.name} ataca ${s.players[enemy].name}!` });
+      strike(s, s.players[enemy], def.act.amount, def.act.element, def.name);
+      break;
+    case "cura":
+      p.vida = cap(p.vida + def.act.amount);
+      log(s, { kind: "cura", actor: p.id, amount: def.act.amount, text: `${def.name} cura ${def.act.amount} de Vida de ${p.name}.` });
+      break;
+    case "fe":
+      p.fe = cap(p.fe + def.act.amount);
+      log(s, { kind: "guardiao", actor: p.id, amount: def.act.amount, text: `${def.name} traz ${def.act.amount} de Fé para ${p.name}.` });
+      break;
+    case "ouro":
+      p.ouro = cap(p.ouro + def.act.amount);
+      log(s, { kind: "guardiao", actor: p.id, amount: def.act.amount, text: `${def.name} acha ${def.act.amount} de Ouro para ${p.name}.` });
+      break;
+    case "veneno":
+      addStatus(s, s.players[enemy], "veneno", def.act.turns);
+      log(s, { kind: "mazela", actor: p.id, target: enemy, text: `${def.name} de ${p.name} envenena ${s.players[enemy].name}.` });
+      break;
+  }
+}
+
 function endTurn(s: GameState, now: number) {
   const p = s.players[s.active];
   if (p.alive) {
     p.statuses = p.statuses.map((st) => ({ ...st, turns: st.turns - 1 })).filter((st) => st.turns > 0);
   }
   if (checkOver(s)) return;
+  if (s.extraTurn === s.active && p.alive) {
+    s.extraTurn = null;
+    log(s, { kind: "prodigio", actor: p.id, text: `O Cetro do Tempo gira: ${p.name} joga de novo!` });
+    beginTurn(s, p.id, now);
+    return;
+  }
+  s.extraTurn = null;
   const next = othersFrom(s, s.active)[0];
   // Posições contadas a partir de quem abriu a partida (funciona mesmo se essa pessoa já caiu).
   const n = s.order.length;
@@ -259,6 +372,11 @@ function cap(n: number) {
 
 // ---------- Golpes ----------
 
+/** A Lua de Sangue soma em todo golpe enquanto estiver no céu. */
+function moonBonus(s: GameState): number {
+  return s.phenomenon?.id === "lua-de-sangue" ? BLOOD_MOON_BONUS : 0;
+}
+
 function startAttack(s: GameState, attack: Omit<PendingAttack, "current" | "queue" | "reflected">, targets: string[], now: number) {
   if (targets.length === 0) {
     endTurn(s, now);
@@ -282,7 +400,19 @@ function continueAttack(s: GameState, attack: PendingAttack, now: number) {
 }
 
 function hit(s: GameState, attack: PendingAttack, target: PlayerState, defense: number, now: number) {
-  const dmg = damageFor(attack, defense);
+  if (attack.area) hurtGuardian(s, target, attack.power);
+  if (attack.lethal && defense === 0) {
+    if (target.guardian?.id === "golem") {
+      target.guardian = null;
+      log(s, { kind: "guardiao", target: target.id, text: `O Golem de Bronze se joga na frente da Sentença e é levado no lugar de ${target.name}.` });
+    } else {
+      fall(s, target, `A Sentença do Tártaro se cumpre: ${target.name} cai na hora.`);
+    }
+    if (checkOver(s)) return;
+    continueAttack(s, attack, now);
+    return;
+  }
+  const dmg = golemAbsorbs(s, target, damageFor(attack, defense));
   if (dmg > 0) {
     target.vida -= dmg;
     log(s, {
@@ -373,7 +503,7 @@ function attackWith(s: GameState, p: PlayerState, a: Extract<GameAction, { type:
 
   const cards = [a.weapon, ...boosterIds].map((uid) => takeFromHand(p, uid));
   let element = weapon.element;
-  let power = weapon.attack ?? 0;
+  let power = (weapon.attack ?? 0) + moonBonus(s);
   for (const b of boosters) {
     power += b.boost ?? 0;
     if (b.convert) element = b.convert;
@@ -386,14 +516,20 @@ function attackWith(s: GameState, p: PlayerState, a: Extract<GameAction, { type:
     amount: power,
     element,
     cards: cards.map((c) => c.id),
-    text: weapon.area ? `${p.name} ataca todos com ${label} (${power}).` : `${p.name} ataca ${s.players[targets[0]].name} com ${label} (${power}).`,
+    text: `${p.name} ataca ${weapon.area ? "todos" : s.players[targets[0]].name} com ${label} (${power}${moonBonus(s) ? ", com a Lua de Sangue" : ""}).`,
   });
-  startAttack(s, { from: p.id, cards, label, power, element, inflict: weapon.inflict }, targets, now);
+  startAttack(s, { from: p.id, cards, label, power, element, inflict: weapon.inflict, lethal: weapon.lethal, area: weapon.area }, targets, now);
 }
 
 function targetOther(s: GameState, p: PlayerState, target: string | undefined): PlayerState {
   const t = target ? s.players[target] : undefined;
   if (!t || !t.alive || t.id === p.id) throw new GameError("Escolha um deus vivo como alvo.");
+  return t;
+}
+
+function targetAny(s: GameState, p: PlayerState, target: string | undefined): PlayerState {
+  const t = target ? s.players[target] : p;
+  if (!t || !t.alive) throw new GameError("Escolha um deus vivo como alvo.");
   return t;
 }
 
@@ -404,10 +540,11 @@ function playCard(s: GameState, p: PlayerState, a: Extract<GameAction, { type: "
   if (!effect || def.kind === "arma" || def.kind === "reforco" || def.kind === "defesa") {
     throw new GameError(def.kind === "arma" ? "Use a arma para atacar." : `${def.name} não se usa na sua vez.`);
   }
-  if (effect.type === "vender" || effect.type === "alquimia") throw new GameError(`${def.name} precisa de mais detalhes.`);
+  if (effect.type === "vender" || effect.type === "alquimia" || effect.type === "escambo") throw new GameError(`${def.name} precisa de mais detalhes.`);
 
   // Escolhe o alvo antes de gastar qualquer coisa: se ele for inválido, nada muda.
-  const target = def.target === "other" ? targetOther(s, p, a.target) : undefined;
+  const target = def.target === "other" ? targetOther(s, p, a.target) : def.target === "any" ? targetAny(s, p, a.target) : undefined;
+  if (effect.type === "banir" && target && !target.guardian) throw new GameError(`${target.name} não tem guardião.`);
   if (effect.type === "furto" && target && target.hand.length === 0) throw new GameError(`${target.name} está sem cartas.`);
   if (effect.type === "furto" && p.hand.length >= HAND_MAX) throw new GameError("Sua mão está cheia.");
 
@@ -419,7 +556,7 @@ function playCard(s: GameState, p: PlayerState, a: Extract<GameAction, { type: "
     takeFromHand(p, inst.uid);
   }
 
-  const kind = def.kind === "milagre" ? "milagre" : def.kind === "item" ? "item" : "troca";
+  const kind = def.kind === "milagre" ? "milagre" : def.kind === "item" ? "item" : def.kind === "prodigio" ? "prodigio" : "troca";
   switch (effect.type) {
     case "cura":
       p.vida = cap(p.vida + effect.amount);
@@ -444,27 +581,82 @@ function playCard(s: GameState, p: PlayerState, a: Extract<GameAction, { type: "
       break;
     case "mazela":
       addStatus(s, target!, effect.status, effect.turns);
+      if (target!.id === p.id) {
+        log(s, { kind: "mazela", actor: p.id, target: p.id, cards: [def.id], text: `${p.name} usa ${def.name} em si mesmo.` });
+        break;
+      }
       log(s, { kind: "mazela", actor: p.id, target: target!.id, cards: [def.id], text: `${p.name} lança ${def.name} em ${target!.name}.` });
       break;
     case "furto": {
-      const i = Math.floor(random(s) * target!.hand.length);
-      const [stolen] = target!.hand.splice(i, 1);
-      p.hand.push(stolen);
-      log(s, { kind, actor: p.id, target: target!.id, cards: [def.id], text: `${p.name} usa ${def.name} e leva uma carta de ${target!.name}.` });
+      const n = Math.min(effect.amount ?? 1, target!.hand.length, HAND_MAX - p.hand.length);
+      for (let k = 0; k < n; k++) {
+        const i = Math.floor(random(s) * target!.hand.length);
+        p.hand.push(...target!.hand.splice(i, 1));
+      }
+      log(s, { kind, actor: p.id, target: target!.id, cards: [def.id], text: `${p.name} usa ${def.name} e leva ${n === 1 ? "uma carta" : `${n} cartas`} de ${target!.name}.` });
       break;
     }
+    case "renascer":
+      p.vida = Math.max(p.vida, START.vida);
+      p.statuses = [];
+      log(s, { kind: "cura", actor: p.id, cards: [def.id], text: `${p.name} usa ${def.name} e volta inteiro: ${p.vida} de Vida.` });
+      break;
+    case "turno-extra":
+      s.extraTurn = p.id;
+      log(s, { kind, actor: p.id, cards: [def.id], text: `${p.name} ergue o ${def.name}: vai jogar de novo.` });
+      break;
+    case "pacto":
+      p.fe = cap(p.fe + effect.fe);
+      addStatus(s, p, effect.status, effect.turns);
+      log(s, { kind: "mazela", actor: p.id, target: p.id, cards: [def.id], text: `${p.name} assina o ${def.name}: +${effect.fe} de Fé e ${STATUS_LABEL[effect.status]}.` });
+      break;
+    case "invocar":
+      summon(s, p, effect.guardian);
+      break;
+    case "banir": {
+      const name = GUARDIAN_MAP[target!.guardian!.id].name;
+      target!.guardian = null;
+      log(s, { kind: "guardiao", actor: p.id, target: target!.id, cards: [def.id], text: `${p.name} usa ${def.name}: ${name} de ${target!.name} some.` });
+      break;
+    }
+    case "hora-zero":
+      for (const id of alivePlayers(s)) s.players[id].vida = 1;
+      log(s, { kind: "prodigio", actor: p.id, cards: [def.id], text: `${p.name} invoca a ${def.name}! A Vida de todos os deuses vira 1.` });
+      break;
+    case "conjuncao":
+      log(s, { kind: "prodigio", actor: p.id, cards: [def.id], text: `${p.name} provoca a ${def.name}: os astros se alinham!` });
+      for (const id of [p.id, ...othersFrom(s, p.id)]) summon(s, s.players[id]);
+      break;
+    case "destinos": {
+      const mine = p.vida;
+      p.vida = target!.vida;
+      target!.vida = mine;
+      log(s, { kind: "prodigio", actor: p.id, target: target!.id, cards: [def.id], text: `${p.name} usa ${def.name} com ${target!.name}: agora ${p.vida} e ${target!.vida} de Vida.` });
+      break;
+    }
+    case "diluvio":
+      for (const id of alivePlayers(s)) {
+        s.players[id].hand = [];
+        give(s, s.players[id], HAND_SIZE);
+      }
+      log(s, { kind: "prodigio", actor: p.id, cards: [def.id], text: `${p.name} solta o ${def.name}: todas as mãos são levadas e renovadas.` });
+      break;
+    case "fenomeno":
+      s.phenomenon = { id: effect.phenomenon, untilRound: s.round + effect.rounds };
+      log(s, { kind: "prodigio", actor: p.id, cards: [def.id], text: `${p.name} chama a ${def.name}: todo golpe ganha +${BLOOD_MOON_BONUS} até a volta ${s.round + effect.rounds}.` });
+      break;
     case "ataque": {
       const targets = effect.area ? othersFrom(s, p.id) : [target!.id];
       log(s, {
         kind: "ataque",
         actor: p.id,
         target: effect.area ? undefined : target!.id,
-        amount: effect.amount,
+        amount: effect.amount + moonBonus(s),
         element: effect.element,
         cards: [def.id],
-        text: effect.area ? `${p.name} invoca ${def.name} sobre todos (${effect.amount}).` : `${p.name} invoca ${def.name} sobre ${target!.name} (${effect.amount}).`,
+        text: `${p.name} invoca ${def.name} sobre ${effect.area ? "todos" : target!.name} (${effect.amount + moonBonus(s)}).`,
       });
-      startAttack(s, { from: p.id, cards: [inst], label: def.name, power: effect.amount, element: effect.element }, targets, now);
+      startAttack(s, { from: p.id, cards: [inst], label: def.name, power: effect.amount + moonBonus(s), element: effect.element, area: effect.area }, targets, now);
       return;
     }
     case "comprar": {
@@ -505,6 +697,38 @@ function alchemy(s: GameState, p: PlayerState, a: Extract<GameAction, { type: "a
   endTurn(s, now);
 }
 
+function offerTrade(s: GameState, p: PlayerState, a: Extract<GameAction, { type: "escambo" }>, now: number) {
+  const scroll = card(findInHand(p, a.card).id);
+  if (scroll.effect?.type !== "escambo") throw new GameError(`${scroll.name} não faz escambo.`);
+  if (a.item === a.card) throw new GameError("Escolha outra carta para oferecer.");
+  findInHand(p, a.item);
+  const t = targetOther(s, p, a.target);
+  if (!Number.isInteger(a.price) || a.price < 0 || a.price > MAX_STAT) throw new GameError("Preço inválido.");
+  takeFromHand(p, a.card);
+  const item = takeFromHand(p, a.item);
+  log(s, { kind: "troca", actor: p.id, target: t.id, amount: a.price, cards: [scroll.id, item.id], text: `${p.name} oferece ${card(item.id).name} a ${t.name} por ${a.price} de Ouro.` });
+  s.phase = { type: "proposta", player: t.id, trade: { from: p.id, item, price: a.price } };
+  setDeadline(s, now);
+}
+
+function answerTrade(s: GameState, p: PlayerState, accept: boolean, now: number) {
+  if (s.phase.type !== "proposta") throw new GameError("Não há proposta.");
+  const { from, item, price } = s.phase.trade;
+  const seller = s.players[from];
+  if (accept) {
+    if (p.ouro < price) throw new GameError(`Ouro insuficiente: a proposta pede ${price}.`);
+    if (p.hand.length >= HAND_MAX) throw new GameError("Sua mão está cheia.");
+    p.ouro -= price;
+    seller.ouro = cap(seller.ouro + price);
+    p.hand.push(item);
+    log(s, { kind: "troca", actor: p.id, target: from, amount: price, cards: [item.id], text: `${p.name} aceita: leva ${card(item.id).name} por ${price} de Ouro.` });
+  } else {
+    if (seller.alive) seller.hand.push(item);
+    log(s, { kind: "troca", actor: p.id, target: from, text: `${p.name} recusa a proposta de ${seller.name}.` });
+  }
+  endTurn(s, now);
+}
+
 function buy(s: GameState, p: PlayerState, offerUid: string | null, now: number) {
   if (s.phase.type !== "mercado") throw new GameError("O mercado está fechado.");
   if (offerUid) {
@@ -535,7 +759,11 @@ export function applyAction(state: GameState, pid: string, action: GameAction, n
     fall(s, p, `${p.name} desistiu e deixou a arena.`);
     if (checkOver(s)) return s;
     if (s.phase.type === "defesa" && wasDeciding) continueAttack(s, s.phase.attack, now);
-    else if (s.active === pid && s.phase.type !== "defesa") endTurn(s, now);
+    else if (s.phase.type === "proposta" && wasDeciding) {
+      const { from, item } = s.phase.trade;
+      if (s.players[from].alive) s.players[from].hand.push(item);
+      endTurn(s, now);
+    } else if (s.active === pid && s.phase.type !== "defesa" && s.phase.type !== "proposta") endTurn(s, now);
     return s;
   }
 
@@ -561,6 +789,9 @@ export function applyAction(state: GameState, pid: string, action: GameAction, n
         case "alquimia":
           alchemy(s, p, action, now);
           break;
+        case "escambo":
+          offerTrade(s, p, action, now);
+          break;
         default:
           throw new GameError("Essa jogada não vale agora.");
       }
@@ -572,6 +803,10 @@ export function applyAction(state: GameState, pid: string, action: GameAction, n
     case "mercado":
       if (action.type !== "comprar") throw new GameError("Escolha uma relíquia ou saia do mercado.");
       buy(s, p, action.offer, now);
+      break;
+    case "proposta":
+      if (action.type !== "responder") throw new GameError("Aceite ou recuse a proposta.");
+      answerTrade(s, p, action.accept, now);
       break;
   }
   return s;
@@ -586,6 +821,8 @@ export function timeoutAction(s: GameState): GameAction | null {
       return { type: "defender", cards: [] };
     case "mercado":
       return { type: "comprar", offer: null };
+    case "proposta":
+      return { type: "responder", accept: false };
     default:
       return null;
   }
@@ -608,6 +845,7 @@ export function viewFor(s: GameState, pid: string | null): GameView {
   return {
     turn: s.turn,
     round: s.round,
+    phenomenon: s.phenomenon,
     order: s.order,
     active: s.active,
     phase,

@@ -13,7 +13,7 @@
 ![Tailwind CSS](https://img.shields.io/badge/Tailwind_4-0b1030?style=flat-square&logo=tailwindcss&logoColor=38bdf8)
 ![Ably](https://img.shields.io/badge/Ably-0b1030?style=flat-square&logo=ably&logoColor=ff5416)
 ![Upstash](https://img.shields.io/badge/Upstash_Redis-0b1030?style=flat-square&logo=upstash&logoColor=00e9a3)
-![Vitest](https://img.shields.io/badge/54_testes-0b1030?style=flat-square&logo=vitest&logoColor=d8f347)
+![Vitest](https://img.shields.io/badge/80_testes-0b1030?style=flat-square&logo=vitest&logoColor=d8f347)
 
 **Um jogo de cartas por turnos para até 6 deuses, direto no navegador.**
 <br />
@@ -34,6 +34,7 @@ Abre a sala, manda o link no grupo e joga, no computador ou no celular. **Sem ca
     <td align="center"><img src="docs/saguao-celular.png" width="230" alt="Saguão no celular com o código da sala, o QR Code e os deuses sentados" /><br /><sub><b>O saguão</b><br />código, QR Code e link</sub></td>
     <td align="center"><img src="docs/vez-celular.png" width="230" alt="Sua vez no celular, com uma arma escolhida e um alvo marcado" /><br /><sub><b>Sua vez</b><br />arma, reforço e alvo</sub></td>
     <td align="center"><img src="docs/defesa-celular.png" width="230" alt="Defesa no celular: o golpe que está vindo e as defesas que seguram aquele elemento brilhando" /><br /><sub><b>Defenda-se</b><br />só brilha o que segura o golpe</sub></td>
+    <td align="center"><img src="docs/proposta-celular.png" width="230" alt="Proposta de escambo no celular: um bot oferece a Ambrosia por 8 de Ouro, com os botões Aceitar e Recusar" /><br /><sub><b>Uma proposta</b><br />aceita ou recusa na hora</sub></td>
   </tr>
 </table>
 
@@ -41,7 +42,13 @@ Abre a sala, manda o link no grupo e joga, no computador ou no celular. **Sem ca
 
 - **Multiplayer de verdade, em tempo real.** Até 6 pessoas por sala, cada uma no seu aparelho. Entrou pelo link, escolheu nome e brasão, sentou à mesa.
 - **Bots para treinar.** Uma partida na hora contra 1 a 5 bots, ou bots para completar a mesa dos amigos. Eles jogam só com o que veriam: a própria mão e a mesa.
-- **45 relíquias originais** em seis tipos: armas, reforços, defesas, milagres, itens e trocas. Todas no [Códice](https://panteao.joaovaz.dev/codice).
+- **62 relíquias originais** em sete tipos: armas, reforços, defesas, milagres, itens, trocas e prodígios. Todas no [Códice](https://panteao.joaovaz.dev/codice).
+- **Guardiões.** Quebre uma Ânfora Selada e um Grifo Dourado, um Golem de Bronze ou uma Serpente das Sombras passa a lutar ao seu lado, agindo sozinho a cada vez sua. Golpes em área também os ferem, e o Banimento manda embora.
+- **Prodígios que viram a partida.** A Hora Zero deixa todo mundo com 1 de Vida, a Grande Conjunção dá um guardião a cada deus, a Troca de Destinos troca a sua Vida com a de outro, o Dilúvio renova todas as mãos e a Lua de Sangue soma +3 em todo golpe por três voltas.
+- **Céu e inferno.** A Graça Celeste cura toda vez, mas pode levar você ao céu de vez. A Danação queima e pode arrastar ao Tártaro. E a Sentença do Tártaro derruba na hora quem não tiver uma Luz para segurar.
+- **Milagres roubados dos deuses antigos.** Julgamento Celeste, Ira dos Titãs, Renascer, Cetro do Tempo (você joga de novo) e Saque dos Céus: fortíssimos, mas custam 10 a 15 de Fé.
+- **Escambo entre jogadores.** Ofereça uma carta a outro deus pelo Ouro que quiser; ele aceita ou recusa na hora.
+- **Sons.** Golpe, pancada, escudo, cura, milagre, guardião, gongo dos prodígios, sino da sua vez e tique-taque do relógio, com botão de mudo.
 - **Seis elementos.** Escudo comum não segura Fogo, só a Luz segura o Abismo, e nada segura a Luz.
 - **Espelho, esquiva, veneno, sono e silêncio.** Golpes refletidos voltam para quem atacou e podem ser defendidos de novo.
 - **Mercado, penhor e alquimia.** O Ouro compra relíquias, e a Balança troca Vida por Fé (ou o contrário).
@@ -56,6 +63,21 @@ Abre a sala, manda o link no grupo e joga, no computador ou no celular. **Sem ca
 
 <img src="docs/codice.png" alt="O Códice com as armas: cada carta com seu golpe, elemento, constelação e uma frase" width="100%" />
 
+## 🌌 Quando a mesa vira
+
+Quando alguém joga um prodígio, a carta aparece grande no meio da tela de todo mundo, com o gongo cósmico tocando.
+
+<img src="docs/hora-zero.png" alt="A Hora Zero sendo jogada: a carta grande no centro da mesa e o aviso de que a Vida de todos os deuses vira 1" width="100%" />
+
+<table>
+  <tr>
+    <td align="center" width="50%"><img src="docs/conjuncao.png" alt="Depois da Grande Conjunção, cada deus da mesa com um guardião ao lado do nome" /><br /><sub><b>Grande Conjunção</b><br />cada deus ganha um guardião</sub></td>
+    <td align="center" width="50%"><img src="docs/escambo.png" alt="Escambo: a Égide Dourada escolhida para oferecer, o preço ajustável e o alvo marcado" /><br /><sub><b>Escambo</b><br />uma carta pelo Ouro que você pedir</sub></td>
+  </tr>
+</table>
+
+<img src="docs/prodigios.png" alt="O Códice com os cinco prodígios e os sete guardiões" width="100%" />
+
 ## 🃏 Regras em um minuto
 
 Cada deus começa com **36 de Vida, 10 de Fé, 20 de Ouro e 8 cartas**. No começo da sua vez, a mão volta a ter 8 cartas. Na sua vez você faz **uma** coisa:
@@ -64,8 +86,9 @@ Cada deus começa com **36 de Vida, 10 de Fé, 20 de Ouro e 8 cartas**. No come�
 | --- | --- |
 | ⚔️ **Atacar** | Uma arma + até 2 reforços. Escolha o alvo (armas em área pegam todos). |
 | ✨ **Milagre** | Gasta Fé e **volta para a mão**: cura, relâmpago, tempestade, silêncio, furto, profecia. |
-| 🧪 **Item** | Ambrosia, néctar, oferendas, ervas. Usou, acabou. |
-| 🪙 **Troca** | Mercado Celeste (compra), Penhorista (vende), Balança da Alquimia (redistribui Vida, Fé e Ouro). |
+| 🧪 **Item** | Ambrosia, néctar, oferendas, ervas, o Pacto Infernal e a Ânfora Selada, que invoca um guardião. Usou, acabou. |
+| 🪙 **Troca** | Mercado Celeste (compra), Penhorista (vende), Escambo (oferece uma carta a outro deus), Balança da Alquimia (redistribui Vida, Fé e Ouro). |
+| 🌌 **Prodígio** | Raríssimo e vira a partida: Hora Zero, Grande Conjunção, Troca de Destinos, Dilúvio Primordial, Lua de Sangue. |
 | 🙏 **Orar** | Compra uma carta e passa a vez. |
 
 Quem é atacado escolhe as defesas. **O dano é o golpe menos a soma das defesas que seguram aquele elemento:**
@@ -110,6 +133,7 @@ sequenceDiagram
 
 - **Next.js 16** com Cache Components e App Router; a página do Códice e a inicial saem prontas no build, a sala é toda do cliente.
 - **O jogo é feito de funções puras** (`src/game`): recebem um estado e uma jogada e devolvem o novo estado, com o "agora" vindo de fora e um gerador de números com semente dentro do estado. A mesma semente repete a mesma partida, o que deixa tudo testável.
+- **Os sons também são código.** Nenhum arquivo de áudio: cada efeito é montado na hora com osciladores e ruído filtrado do Web Audio, e só toca o que aconteceu depois que você abriu a mesa.
 - **A arte é código.** Cada carta tem uma constelação própria desenhada a partir do id, um ícone de traço e o brilho do seu elemento. O céu do fundo é feito só de gradientes.
 
 ```
@@ -120,13 +144,15 @@ src/
 │   ├── sala/[code]/           # saguão e mesa
 │   └── api/salas/             # criar, ler, jogar e os avisos por SSE; api/ably dá o token
 ├── game/
-│   ├── cards.ts               # as 45 relíquias
+│   ├── cards.ts               # as 62 relíquias e os 7 guardiões
 │   ├── engine.ts              # turnos, golpes, defesas, mazelas, Crepúsculo, vitória
 │   ├── bot.ts                 # a cabeça dos bots
 │   └── room.ts                # saguão, assentos, revanche e o relógio
 ├── server/                    # store (memória ou Redis), avisos (SSE ou Ably) e a ponte com o jogo
 ├── components/                # cartas, brasões, mesa, saguão
-└── lib/use-room.ts            # mantém a sala em dia no navegador
+└── lib/
+    ├── use-room.ts            # mantém a sala em dia no navegador
+    └── sfx.ts                 # os sons, sintetizados com Web Audio
 ```
 
 ## 🧪 Testes
@@ -135,7 +161,7 @@ src/
 npm test
 ```
 
-54 testes cobrem o motor (dano e defesa, cada elemento, Abismo em dobro, Luz indefensável, reforços que trocam o elemento, Espelho que devolve o golpe, esquiva, golpes em área na ordem da mesa, veneno, sono, silêncio, milagres que voltam para a mão, mercado, penhor, alquimia, voltas, Crepúsculo, desistência e vitória), a visão de cada jogador (nada da mão alheia vaza), o saguão e o relógio da sala. Um teste joga **150 partidas inteiras só entre bots** e confere que nenhuma jogada deles é inválida e que todas terminam.
+80 testes cobrem o motor (dano e defesa, cada elemento, Abismo em dobro, Luz indefensável, reforços que trocam o elemento, Espelho que devolve o golpe, esquiva, golpes em área na ordem da mesa, veneno, sono, silêncio, milagres que voltam para a mão, mercado, penhor, alquimia, escambo aceito e recusado, guardiões atacando, curando e segurando dano, a Sentença do Tártaro, a Graça e a Danação, cada prodígio, os milagres caros, voltas, Crepúsculo, desistência e vitória), a visão de cada jogador (nada da mão alheia vaza), o saguão e o relógio da sala. Um teste joga **150 partidas inteiras só entre bots** e confere que nenhuma jogada deles é inválida e que todas terminam.
 
 Além disso, um roteiro de ponta a ponta com **Playwright** abre três navegadores independentes, um deles no tamanho de um celular: cria a sala, entra pelo link, vê o saguão se atualizar sozinho nas três abas, adiciona um bot, joga uma partida inteira pela interface (atacando, defendendo e orando), confere que todos veem o mesmo vencedor, chama a revanche e testa a saída no meio da partida.
 

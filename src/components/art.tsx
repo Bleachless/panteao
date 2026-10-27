@@ -1,5 +1,25 @@
 import {
+  Amphora,
   Anchor,
+  ArrowLeftRight,
+  Ban,
+  Bot,
+  Clock,
+  CloudRain,
+  DoorOpen,
+  Egg,
+  FileSignature,
+  Gavel,
+  HandGrab,
+  Handshake,
+  Hourglass,
+  MoonStar,
+  Mountain,
+  Orbit,
+  Rabbit,
+  Stars,
+  Turtle,
+  Worm,
   Axe,
   Bird,
   CloudLightning,
@@ -43,7 +63,7 @@ import {
   Wind,
   Zap,
 } from "lucide-react";
-import type { Element } from "@/game/types";
+import type { Element, GuardianId } from "@/game/types";
 
 // Arte das relíquias: ícones de traço sobre uma constelação gerada pelo id da carta.
 
@@ -174,7 +194,39 @@ const ICONS: Record<string, LucideIcon | ReturnType<typeof svgIcon>> = {
   mercado: Store,
   penhor: HandCoins,
   alquimia: Scale,
+  anfora: Amphora,
+  banimento: Ban,
+  escambo: Handshake,
+  "hora-zero": Clock,
+  conjuncao: Orbit,
+  destinos: ArrowLeftRight,
+  diluvio: CloudRain,
+  "lua-de-sangue": MoonStar,
+  sentenca: Skull,
+  julgamento: Gavel,
+  ira: Mountain,
+  renascer: Egg,
+  "cetro-tempo": Hourglass,
+  saque: HandGrab,
+  escada: Stars,
+  portal: DoorOpen,
+  pacto: FileSignature,
 };
+
+const GUARDIAN_ICONS: Record<GuardianId, LucideIcon> = {
+  grifo: Bird,
+  salamandra: Flame,
+  cervo: Rabbit,
+  golem: Bot,
+  serpente: Worm,
+  coruja: Feather,
+  tartaruga: Turtle,
+};
+
+export function GuardianIcon({ id, ...props }: { id: GuardianId } & LucideProps) {
+  const Icon = GUARDIAN_ICONS[id];
+  return <Icon {...props} />;
+}
 
 export function CardIcon({ id, ...props }: { id: string } & LucideProps) {
   const Icon = ICONS[id] ?? Gem;

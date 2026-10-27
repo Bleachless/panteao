@@ -8,8 +8,10 @@ import { createJSONStorage, persist } from "zustand/middleware";
 interface Session {
   name: string;
   sigil: number;
+  muted: boolean;
   seats: Record<string, { token: string; you: string; at: number }>;
   setProfile: (name: string, sigil: number) => void;
+  toggleMuted: () => void;
   remember: (code: string, token: string, you: string) => void;
   forget: (code: string) => void;
 }
@@ -19,8 +21,10 @@ export const useSession = create<Session>()(
     (set) => ({
       name: "",
       sigil: 0,
+      muted: false,
       seats: {},
       setProfile: (name, sigil) => set({ name, sigil }),
+      toggleMuted: () => set((s) => ({ muted: !s.muted })),
       remember: (code, token, you) =>
         set((s) => {
           // Guarda só as 20 salas mais recentes.

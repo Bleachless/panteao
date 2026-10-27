@@ -1,8 +1,8 @@
 // Tipos do jogo. Tudo aqui é dado puro (serializável em JSON) para caber no Redis e viajar pela rede.
 
 export type Element = "neutro" | "fogo" | "mar" | "vento" | "luz" | "abismo";
-export type Kind = "arma" | "reforco" | "defesa" | "milagre" | "item" | "troca";
-export type StatusId = "veneno" | "sono" | "silencio";
+export type Kind = "arma" | "reforco" | "defesa" | "milagre" | "item" | "troca" | "prodigio";
+export type StatusId = "veneno" | "sono" | "silencio" | "graca" | "danacao";
 export type Rarity = 1 | 2 | 3;
 
 export type Effect =
@@ -13,10 +13,50 @@ export type Effect =
   | { type: "profecia"; amount: number }
   | { type: "ataque"; amount: number; element: Element; area?: boolean }
   | { type: "mazela"; status: StatusId; turns: number }
-  | { type: "furto" }
+  | { type: "furto"; amount?: number }
+  | { type: "renascer" }
+  | { type: "turno-extra" }
+  | { type: "pacto"; fe: number; status: StatusId; turns: number }
   | { type: "comprar" }
   | { type: "vender" }
-  | { type: "alquimia" };
+  | { type: "alquimia" }
+  | { type: "escambo" }
+  | { type: "invocar"; guardian?: GuardianId }
+  | { type: "banir" }
+  | { type: "hora-zero" }
+  | { type: "conjuncao" }
+  | { type: "destinos" }
+  | { type: "diluvio" }
+  | { type: "fenomeno"; phenomenon: PhenomenonId; rounds: number };
+
+export type GuardianId = "grifo" | "salamandra" | "cervo" | "golem" | "serpente" | "coruja" | "tartaruga";
+export type PhenomenonId = "lua-de-sangue";
+
+/** O que o guardião faz no começo da vez do dono (quando a sorte deixa). */
+export type GuardianAct =
+  | { type: "golpe"; amount: number; element: Element }
+  | { type: "cura"; amount: number }
+  | { type: "fe"; amount: number }
+  | { type: "ouro"; amount: number }
+  | { type: "veneno"; turns: number }
+  /** Não age: segura o dano que iria para o dono. */
+  | { type: "escudo" };
+
+export interface GuardianDef {
+  id: GuardianId;
+  name: string;
+  element: Element;
+  vida: number;
+  /** Chance de agir no começo da vez do dono (0 a 1). */
+  chance: number;
+  act: GuardianAct;
+  text: string;
+}
+
+export interface GuardianInst {
+  id: GuardianId;
+  vida: number;
+}
 
 export interface CardDef {
   id: string;
@@ -47,8 +87,10 @@ export interface CardDef {
   /** Milagre: custo em Fé. */
   cost?: number;
   effect?: Effect;
-  /** Quem a carta pode mirar ao ser usada. */
-  target?: "self" | "other";
+  /** Quem a carta pode mirar ao ser usada ("any" inclui você). */
+  target?: "self" | "other" | "any";
+  /** Golpe que derruba na hora se não for segurado. */
+  lethal?: boolean;
 }
 
 export interface CardInst {
@@ -73,6 +115,8 @@ export interface PlayerState {
   alive: boolean;
   /** Ordem de queda: 1 = primeiro a cair. */
   fallen?: number;
+  /** O companheiro invocado, se houver. */
+  guardian?: GuardianInst | null;
 }
 
 export interface PendingAttack {
@@ -84,6 +128,9 @@ export interface PendingAttack {
   power: number;
   element: Element;
   inflict?: { status: StatusId; turns: number };
+  lethal?: boolean;
+  /** Golpe em área: também fere os guardiões. */
+  area?: boolean;
   /** Quem está se defendendo agora. */
   current: string;
   /** Próximos alvos de um golpe em área. */
@@ -95,7 +142,15 @@ export type Phase =
   | { type: "acao"; player: string }
   | { type: "defesa"; player: string; attack: PendingAttack }
   | { type: "mercado"; player: string; offer: CardInst[] }
+  | { type: "proposta"; player: string; trade: Trade }
   | { type: "fim"; winner: string | null };
+
+/** Uma proposta de escambo: quem oferece, a carta e quanto Ouro pede por ela. */
+export interface Trade {
+  from: string;
+  item: CardInst;
+  price: number;
+}
 
 export type LogKind =
   | "turno"
@@ -111,6 +166,8 @@ export type LogKind =
   | "oracao"
   | "vitoria"
   | "crepusculo"
+  | "guardiao"
+  | "prodigio"
   | "info";
 
 export interface LogEntry {
@@ -148,6 +205,10 @@ export interface GameState {
   settings: GameSettings;
   nextUid: number;
   fallenCount: number;
+  /** Quem joga de novo assim que a vez acabar (Cetro do Tempo). */
+  extraTurn?: string | null;
+  /** Fenômeno que vale para a mesa inteira até o fim de uma volta. */
+  phenomenon: { id: PhenomenonId; untilRound: number } | null;
   log: LogEntry[];
   logSeq: number;
 }
@@ -160,6 +221,8 @@ export type GameAction =
   | { type: "orar" }
   | { type: "defender"; cards: string[] }
   | { type: "comprar"; offer: string | null }
+  | { type: "escambo"; card: string; item: string; target: string; price: number }
+  | { type: "responder"; accept: boolean }
   | { type: "desistir" };
 
 /** O que cada navegador recebe: a própria mão e só a contagem das mãos alheias. */
@@ -176,7 +239,9 @@ export interface GameView {
     | { type: "acao"; player: string }
     | { type: "defesa"; player: string; attack: PendingAttack }
     | { type: "mercado"; player: string; offer: CardInst[] | null }
+    | { type: "proposta"; player: string; trade: Trade }
     | { type: "fim"; winner: string | null };
+  phenomenon: GameState["phenomenon"];
   players: Record<string, PlayerView>;
   deadline: number | null;
   settings: GameSettings;

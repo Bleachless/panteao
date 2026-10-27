@@ -17,6 +17,7 @@ function badgeOf(id: string) {
   if (def.kind === "reforco") return { value: `+${def.boost}`, icon: Sword, tone: "#ff8a6b" };
   if (def.kind === "defesa") return def.defense ? { value: def.defense, icon: Shield, tone: "#9fd3ff" } : { value: def.reflect ? "↺" : "½", icon: Shield, tone: "#9fd3ff" };
   if (def.kind === "milagre") return { value: def.cost, icon: Sparkle, tone: "var(--color-fe)" };
+  if (def.kind === "prodigio") return { value: "!", icon: Sparkle, tone: "var(--color-gold-hi)" };
   return { value: def.price, icon: Coins, tone: "var(--color-ouro)" };
 }
 
@@ -57,6 +58,7 @@ export function CardFace({
     >
       {/* moldura dourada interna e brilho de raridade */}
       <div className="pointer-events-none absolute inset-[3px] rounded-[inherit] border border-gold/25" />
+      {def.kind === "prodigio" && <div className="pointer-events-none absolute inset-0 rounded-[inherit] shadow-[inset_0_0_24px_rgba(248,226,162,0.35)]" />}
       {def.rarity === 3 && (
         <div
           className="pointer-events-none absolute inset-0 animate-shimmer opacity-40 mix-blend-screen"
@@ -85,7 +87,7 @@ export function CardFace({
         {text && <p className="mt-1 text-[11px] leading-[13px] text-ink/80">{def.text}</p>}
         {size !== "sm" && !text && (
           <div className="mt-0.5 text-[9px] uppercase tracking-[0.14em]" style={{ color }}>
-            {def.element === "neutro" ? KIND_LABEL[def.kind] : ELEMENT_LABEL[def.element]}
+            {def.element === "neutro" || def.kind === "prodigio" ? KIND_LABEL[def.kind] : ELEMENT_LABEL[def.element]}
           </div>
         )}
       </div>

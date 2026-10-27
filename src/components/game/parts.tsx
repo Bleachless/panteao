@@ -1,15 +1,37 @@
 "use client";
 
-import { Bot, Coins, Crown, Droplet, Heart, Moon, Skull, Sparkle, VolumeX } from "lucide-react";
+import { Bot, Coins, Crown, Droplet, Flame, Heart, Moon, Skull, Sparkle, Sun, VolumeX } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { START, STATUS_LABEL } from "@/game/engine";
 import type { SeatView } from "@/game/room";
 import type { GameView, LogEntry, PlayerView, StatusId } from "@/game/types";
-import { ELEMENT_COLOR, Sigil } from "../art";
+import { GUARDIAN_MAP } from "@/game/cards";
+import { ELEMENT_COLOR, GuardianIcon, Sigil } from "../art";
 import { CardBack } from "../card-face";
 
-export const STATUS_ICON: Record<StatusId, typeof Droplet> = { veneno: Droplet, sono: Moon, silencio: VolumeX };
-const STATUS_COLOR: Record<StatusId, string> = { veneno: "#7be36b", sono: "#a3b4ff", silencio: "#c49bff" };
+export const STATUS_ICON: Record<StatusId, typeof Droplet> = { veneno: Droplet, sono: Moon, silencio: VolumeX, graca: Sun, danacao: Flame };
+const STATUS_COLOR: Record<StatusId, string> = { veneno: "#7be36b", sono: "#a3b4ff", silencio: "#c49bff", graca: "#ffe27a", danacao: "#ff5a3c" };
+
+/** O guardião de um deus: ícone, nome e Vida que sobra. */
+export function GuardianBadge({ player, compact = false }: { player: PlayerView; compact?: boolean }) {
+  const g = player.guardian;
+  if (!g) return null;
+  const def = GUARDIAN_MAP[g.id];
+  const color = ELEMENT_COLOR[def.element];
+  return (
+    <span
+      key={g.id}
+      title={`${def.name} (${g.vida} de Vida): ${def.text}`}
+      data-guardian={g.id}
+      className="inline-flex animate-pop items-center gap-1 rounded-full border px-1.5 py-px text-[10px] font-semibold"
+      style={{ color, borderColor: `color-mix(in oklab, ${color} 50%, transparent)`, background: `color-mix(in oklab, ${color} 12%, transparent)` }}
+    >
+      <GuardianIcon id={g.id} size={11} />
+      {!compact && <span className="max-w-36 truncate">{def.name}</span>}
+      <span className="tabular-nums text-ink/80">♥{g.vida}</span>
+    </span>
+  );
+}
 
 export function StatusChips({ player }: { player: PlayerView }) {
   if (player.statuses.length === 0) return null;
@@ -141,8 +163,9 @@ export function OpponentChip({
           </div>
           <span className="w-6 text-right font-display text-sm font-bold tabular-nums">{player.vida}</span>
         </div>
-        {player.statuses.length > 0 && (
-          <div className="mt-1">
+        {(player.statuses.length > 0 || player.guardian) && (
+          <div className="mt-1 flex flex-wrap gap-1">
+            <GuardianBadge player={player} compact />
             <StatusChips player={player} />
           </div>
         )}

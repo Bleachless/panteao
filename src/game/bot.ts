@@ -35,7 +35,8 @@ function pickTarget(s: GameState, me: string): PlayerState {
 function heal(s: GameState, p: PlayerState, hand: Hand): GameAction | null {
   const silenced = p.statuses.some((st) => st.id === "silencio");
   const options = hand.filter(({ def }) => {
-    if (def.effect?.type !== "cura" && !(def.effect?.type === "purificar" && def.effect.heal)) return false;
+    const fx = def.effect?.type;
+    if (fx !== "cura" && fx !== "renascer" && !(fx === "purificar" && def.effect?.type === "purificar" && def.effect.heal)) return false;
     if (def.kind === "milagre") return !silenced && p.fe >= (def.cost ?? 0);
     return true;
   });
@@ -56,7 +57,7 @@ function attackPlan(s: GameState, p: PlayerState, hand: Hand): GameAction | null
   const value = (def: CardDef, power: number) => {
     const elementBonus = def.element === "luz" ? 3 : def.element === "abismo" ? 4 : def.element === "neutro" ? 0 : 1.5;
     const areaBonus = def.area || (def.effect?.type === "ataque" && def.effect.area) ? opponents(s, p.id).length - 1 : 0;
-    return power + elementBonus + areaBonus * 2 + (def.inflict ? 2 : 0);
+    return power + elementBonus + areaBonus * 2 + (def.inflict ? 2 : 0) + (def.lethal ? 9 : 0);
   };
 
   let best: { action: GameAction; score: number } | null = null;
@@ -93,17 +94,47 @@ function attackPlan(s: GameState, p: PlayerState, hand: Hand): GameAction | null
 function utility(s: GameState, p: PlayerState, hand: Hand): GameAction | null {
   const silenced = p.statuses.some((st) => st.id === "silencio");
   const sick = p.statuses.some((st) => st.id === "veneno");
+  const opp = opponents(s, p.id);
+  const strongest = opp.reduce((a, b) => (b.vida > a.vida ? b : a), opp[0]);
+  const avg = opp.reduce((sum, o) => sum + o.vida, 0) / Math.max(1, opp.length);
+  const hasWeapon = hand.some((h) => h.def.kind === "arma");
   for (const { inst, def } of hand) {
     const fx = def.effect;
     if (!fx) continue;
     const canCast = def.kind !== "milagre" || (!silenced && p.fe >= (def.cost ?? 0));
     if (!canCast) continue;
+    // Prodígios e milagres caros
+    if (fx.type === "hora-zero" && p.vida < avg - 6) return { type: "usar", card: inst.uid };
+    if (fx.type === "destinos" && strongest && strongest.vida >= p.vida + 10) return { type: "usar", card: inst.uid, target: strongest.id };
+    if (fx.type === "conjuncao" && !p.guardian) return { type: "usar", card: inst.uid };
+    if (fx.type === "diluvio" && !hasWeapon) return { type: "usar", card: inst.uid };
+    if (fx.type === "fenomeno" && !s.phenomenon && hand.filter((h) => h.def.kind === "arma").length >= 2) return { type: "usar", card: inst.uid };
+    if (fx.type === "turno-extra" && hasWeapon && p.fe >= (def.cost ?? 0) + 2) return { type: "usar", card: inst.uid };
+    // Guardiões
+    if (fx.type === "invocar" && !p.guardian) return { type: "usar", card: inst.uid };
+    if (fx.type === "banir" && p.fe >= (def.cost ?? 0) + 2) {
+      const t = opp.find((o) => o.guardian);
+      if (t) return { type: "usar", card: inst.uid, target: t.id };
+    }
+    // Céu e inferno
+    if (fx.type === "mazela" && fx.status === "graca" && p.vida <= 12 && !p.statuses.some((st) => st.id === "graca")) return { type: "usar", card: inst.uid, target: p.id };
+    if (fx.type === "mazela" && fx.status === "danacao" && p.fe >= (def.cost ?? 0) + 2 && strongest && !strongest.statuses.some((st) => st.id === "danacao")) {
+      return { type: "usar", card: inst.uid, target: strongest.id };
+    }
+    if (fx.type === "pacto" && p.fe < 4 && p.vida > 18) return { type: "usar", card: inst.uid };
+    if (fx.type === "purificar" && p.statuses.some((st) => st.id === "danacao")) return { type: "usar", card: inst.uid };
+    // Escambo: oferece a carta mais cara que não seja arma nem defesa
+    if (fx.type === "escambo" && noise(s, 17) < 0.5) {
+      const extra = hand.filter((h) => h.inst.uid !== inst.uid && h.def.kind !== "arma" && h.def.kind !== "defesa").sort((a, b) => b.def.price - a.def.price)[0];
+      const buyer = opp.reduce((a, b) => (b.ouro > a.ouro ? b : a), opp[0]);
+      if (extra && buyer) return { type: "escambo", card: inst.uid, item: extra.inst.uid, target: buyer.id, price: extra.def.price };
+    }
     if (fx.type === "purificar" && sick) return { type: "usar", card: inst.uid };
     if (fx.type === "fe" && p.fe < 5) return { type: "usar", card: inst.uid };
     if (fx.type === "ouro" && p.ouro < 15) return { type: "usar", card: inst.uid };
     if (fx.type === "comprar" && p.ouro >= 10) return { type: "usar", card: inst.uid };
     if (fx.type === "profecia" && p.hand.length <= HAND_MAX - 3 && p.fe >= 6) return { type: "usar", card: inst.uid };
-    if (fx.type === "mazela" && p.fe >= 7 && noise(s, 11) < 0.5) {
+    if (fx.type === "mazela" && fx.status !== "graca" && fx.status !== "danacao" && p.fe >= 7 && noise(s, 11) < 0.5) {
       const t = pickTarget(s, p.id);
       if (!t.statuses.some((st) => st.id === fx.status)) return { type: "usar", card: inst.uid, target: t.id };
     }
@@ -129,7 +160,7 @@ function defense(s: GameState, p: PlayerState, attack: PendingAttack): GameActio
   const usable = handOf(p).filter((h) => blocks(h.def, attack.element));
   const plain = usable.filter((h) => !h.def.reflect && !h.def.evade).sort((a, b) => (b.def.defense ?? 0) - (a.def.defense ?? 0));
   const raw = damageFor(attack, 0);
-  const lethal = raw >= p.vida;
+  const lethal = raw >= p.vida || !!attack.lethal;
 
   const mirror = usable.find((h) => h.def.reflect);
   if (mirror && (raw >= 7 || lethal)) return { type: "defender", cards: [mirror.inst.uid] };
@@ -160,6 +191,11 @@ export function botAction(s: GameState, pid: string): GameAction {
   const p = s.players[pid];
   const phase = s.phase;
   if (phase.type === "defesa") return defense(s, p, phase.attack);
+  if (phase.type === "proposta") {
+    const item = card(phase.trade.item.id);
+    const fair = phase.trade.price <= item.price && phase.trade.price <= p.ouro && p.hand.length < HAND_MAX;
+    return { type: "responder", accept: fair };
+  }
   if (phase.type === "mercado") {
     const affordable = phase.offer
       .map((inst) => ({ inst, def: card(inst.id) }))

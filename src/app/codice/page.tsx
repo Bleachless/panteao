@@ -1,9 +1,10 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { ELEMENT_COLOR, GuardianIcon } from "@/components/art";
 import { CardFace } from "@/components/card-face";
 import { Footer, Logo } from "@/components/shell";
-import { CARDS, KIND_LABEL } from "@/game/cards";
-import { HAND_SIZE, POISON_DAMAGE, START, TWILIGHT_ROUND } from "@/game/engine";
+import { CARDS, GUARDIANS, KIND_LABEL } from "@/game/cards";
+import { DAMNATION_DAMAGE, GRACE_HEAL, HAND_SIZE, POISON_DAMAGE, START, TWILIGHT_ROUND } from "@/game/engine";
 import type { Kind } from "@/game/types";
 
 export const metadata: Metadata = {
@@ -17,7 +18,8 @@ const ORDER: { kind: Kind; blurb: string }[] = [
   { kind: "defesa", blurb: "Use quantas quiser quando o golpe vier. Espelho e Passo Etéreo vão sozinhos." },
   { kind: "milagre", blurb: "Gastam Fé e voltam para a mão. O Silêncio Sagrado bloqueia." },
   { kind: "item", blurb: "Usou, acabou." },
-  { kind: "troca", blurb: "Mercado, Penhorista e Alquimia: o Ouro também vence partidas." },
+  { kind: "troca", blurb: "Mercado, Penhorista, Escambo e Alquimia: o Ouro também vence partidas." },
+  { kind: "prodigio", blurb: "Raríssimos. Quando caem na mão, a partida inteira vira de uma vez." },
 ];
 
 const RULES = [
@@ -26,6 +28,8 @@ const RULES = [
   "Na sua vez você faz uma coisa só: atacar, usar um milagre, usar um item, negociar ou orar (compra 1 carta e passa).",
   "Quem é atacado escolhe as defesas. O dano é o golpe menos a soma das defesas que seguram aquele elemento.",
   `Mazelas: Veneno tira ${POISON_DAMAGE} de Vida no começo da vez; Sono faz perder a próxima vez; Silêncio impede milagres.`,
+  `Céu e inferno: a Graça Celeste cura ${GRACE_HEAL} por vez, mas pode levar ao céu (cair na hora); a Danação tira ${DAMNATION_DAMAGE} por vez e pode arrastar ao Tártaro.`,
+  "Guardiões lutam ao seu lado e agem sozinhos no começo da sua vez. Golpes em área também os ferem.",
   `A partir da ${TWILIGHT_ROUND}ª volta, o Crepúsculo tira Vida de todos no começo da vez, cada vez mais.`,
   "Quem chega a 0 de Vida vira estrela. O último deus de pé vence.",
 ];
@@ -63,6 +67,9 @@ export default function CodicePage() {
               {KIND_LABEL[kind]}
             </a>
           ))}
+          <a href="#guardioes" className="rounded-full border border-white/10 px-4 py-1.5 text-sm text-mute hover:border-gold/40 hover:text-gold-hi">
+            Guardiões
+          </a>
         </nav>
 
         {ORDER.map(({ kind, blurb }) => {
@@ -85,6 +92,31 @@ export default function CodicePage() {
             </section>
           );
         })}
+        <section id="guardioes" className="scroll-mt-6 pt-12">
+          <h2 className="font-display text-2xl font-bold">
+            Guardiões
+            <span className="ml-2 text-base font-normal text-faint">{GUARDIANS.length}</span>
+          </h2>
+          <p className="mt-1 text-sm text-mute">Saem da Ânfora Selada ou da Grande Conjunção. Cada deus tem um por vez; o Banimento manda embora.</p>
+          <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {GUARDIANS.map((g) => (
+              <div key={g.id} className="glass flex items-center gap-4 rounded-2xl p-4">
+                <span
+                  className="grid h-14 w-14 shrink-0 place-items-center rounded-full"
+                  style={{ color: ELEMENT_COLOR[g.element], background: `radial-gradient(circle at 35% 30%, color-mix(in oklab, ${ELEMENT_COLOR[g.element]} 35%, transparent), #0b1030 70%)`, boxShadow: `inset 0 0 0 1.5px ${ELEMENT_COLOR[g.element]}` }}
+                >
+                  <GuardianIcon id={g.id} size={26} strokeWidth={1.6} />
+                </span>
+                <div>
+                  <div className="font-display font-bold text-gold-hi">
+                    {g.name} <span className="ml-1 text-sm font-normal text-vida">♥{g.vida}</span>
+                  </div>
+                  <p className="text-sm leading-snug text-mute">{g.text}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
       </main>
       <Footer />
     </>

@@ -30,6 +30,28 @@
   --animate-shimmer: shimmer 3.2s linear infinite;
   --animate-pop: pop 0.35s cubic-bezier(0.2, 0.9, 0.3, 1.4) both;
   --animate-twinkle: twinkle 6s ease-in-out infinite;
+  --animate-prodigy: prodigy 2.8s ease-out forwards;
+}
+
+@keyframes prodigy {
+  0% {
+    opacity: 0;
+    transform: scale(0.7) rotate(-4deg);
+  }
+  14% {
+    opacity: 1;
+    transform: scale(1.04);
+  }
+  22% {
+    transform: none;
+  }
+  82% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    visibility: hidden;
+  }
 }
 
 @keyframes rise {
