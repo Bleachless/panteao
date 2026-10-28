@@ -1,18 +1,23 @@
 import "server-only";
+import { botAction } from "@/game/bot";
+import { chatAction } from "@/game/chat";
 import { GameError } from "@/game/engine";
 import {
   addBot,
+  addChatSeat,
   backToLobby,
   CODE_ALPHABET,
   createRoom,
   joinRoom,
   leaveRoom,
+  MAX_SEATS,
   playMove,
   removeSeat,
   roomView,
   setRitmo,
   startGame,
   tickRoom,
+  type Replay,
   type Ritmo,
   type Room,
   type RoomView,
@@ -66,6 +71,13 @@ function respond(room: Room, version: number, you: string | null): RoomResponse 
   return { view: roomView(room, you), version, realtime: realtimeKind(), now: Date.now() };
 }
 
+/** Depois de gravar: guarda o replay da partida que acabou e tira da fila da Arena a mesa que já começou. */
+async function afterSave(prev: Room | null, next: Room) {
+  const store = getStore();
+  if (next.record && next.game?.phase.type === "fim" && prev?.game?.phase.type !== "fim") await store.saveReplay(next.record);
+  if (next.mode === "arena" && next.status !== "saguao" && prev?.status === "saguao") await store.arenaRemove(next.code);
+}
+
 /** Carrega, aplica `change` e grava; tenta de novo se outra jogada chegou antes. */
 async function mutate(code: string, change: (room: Room, now: number) => Room | null | undefined): Promise<{ room: Room | null; version: number }> {
   const store = getStore();
@@ -74,10 +86,11 @@ async function mutate(code: string, change: (room: Room, now: number) => Room | 
     if (!current) throw new NotFound("Sala não encontrada.");
     const now = Date.now();
     // Antes de qualquer jogada, o relógio anda: bots e tempos vencidos entram primeiro.
-    const ticked = tickRoom(current.room, now) ?? current.room;
+    const ticked = tickRoom(current.room, now, randomSeed()) ?? current.room;
     const next = change(ticked, now);
     if (next === null) {
       await store.remove(code);
+      if (current.room.mode === "arena") await store.arenaRemove(code);
       await publish(code, current.version + 1);
       return { room: null, version: current.version + 1 };
     }
@@ -85,6 +98,7 @@ async function mutate(code: string, change: (room: Room, now: number) => Room | 
     if (final === current.room) return current;
     const version = await store.save(code, final, current.version);
     if (version !== null) {
+      await afterSave(current.room, final);
       await publish(code, version);
       return { room: final, version };
     }
@@ -103,7 +117,7 @@ export async function createNewRoom(input: { name: string; mode: Room["mode"]; b
     let room = createRoom({ code, host: { id: hostId, name: input.name, tokenHash }, mode: input.mode, now, sigil: input.sigil });
     if (input.mode === "treino") {
       for (let i = 0; i < input.bots; i++) room = addBot(room, hostId, randomId("bot"));
-      room = startGame(room, hostId, randomSeed(), now);
+      room = startGame(room, hostId, randomSeed(), now, randomId("r"));
     }
     const version = await store.save(code, room, 0);
     if (version !== null) return { code, token, you: hostId, ...respond(room, version, hostId) };
@@ -117,10 +131,11 @@ export async function getRoom(code: string, token: string | null): Promise<RoomR
   if (!current) throw new NotFound("Sala não encontrada.");
   let { room, version } = current;
   // Ler a sala também faz o relógio andar: é assim que os bots jogam sem um servidor ligado o tempo todo.
-  const ticked = tickRoom(room, Date.now());
+  const ticked = tickRoom(room, Date.now(), randomSeed());
   if (ticked) {
     const saved = await store.save(code, ticked, version);
     if (saved !== null) {
+      await afterSave(room, ticked);
       await publish(code, saved);
       room = ticked;
       version = saved;
@@ -133,6 +148,48 @@ export async function getRoom(code: string, token: string | null): Promise<RoomR
   return respond(room, version, await seatFor(room, token));
 }
 
+/** A Arena: entra numa mesa pública que ainda está esperando gente, ou abre uma nova. */
+export async function joinArena(input: { name: string; sigil: number }) {
+  const store = getStore();
+  const token = newToken();
+  const tokenHash = await hashToken(token);
+  const id = randomId("d");
+  for (const code of await store.arenaList()) {
+    const current = await store.load(code);
+    const room = current?.room;
+    if (!room || room.mode !== "arena" || room.status !== "saguao") {
+      await store.arenaRemove(code);
+      continue;
+    }
+    // Mesa cheia ou prestes a começar: procura outra.
+    if (room.seats.length >= MAX_SEATS || (room.startsAt ?? 0) < Date.now() + 3000) continue;
+    try {
+      const joined = await mutate(code, (r, now) => joinRoom(r, { id, name: input.name, tokenHash }, input.sigil, now));
+      return { code, token, you: id, ...respond(joined.room!, joined.version, id) };
+    } catch (err) {
+      if (err instanceof GameError || err instanceof NotFound) continue;
+      throw err;
+    }
+  }
+  for (let attempt = 0; attempt < 8; attempt++) {
+    const code = randomCode();
+    const room = createRoom({ code, host: { id, name: input.name, tokenHash }, mode: "arena", now: Date.now(), sigil: input.sigil });
+    const version = await store.save(code, room, 0);
+    if (version !== null) {
+      await store.arenaAdd(code);
+      return { code, token, you: id, ...respond(room, version, id) };
+    }
+  }
+  throw new GameError("A Arena não abriu agora. Tente de novo.");
+}
+
+export async function getReplay(id: string): Promise<Replay> {
+  if (!/^r[a-z0-9]{3,16}$/i.test(id)) throw new NotFound("Replay não encontrado.");
+  const replay = await getStore().loadReplay(id);
+  if (!replay) throw new NotFound("Esse replay não existe ou já expirou.");
+  return replay;
+}
+
 export type RoomOp =
   | { op: "entrar"; nome: string; brasao?: number }
   | { op: "sair" }
@@ -141,7 +198,9 @@ export type RoomOp =
   | { op: "ritmo"; ritmo: Ritmo }
   | { op: "comecar" }
   | { op: "saguao" }
-  | { op: "jogada"; acao: GameAction }
+  | { op: "jogada"; acao: GameAction; como?: string }
+  | { op: "chat-assento"; canal: string }
+  | { op: "chat"; voto: string | null }
   | { op: "relogio" };
 
 export async function operate(code: string, token: string | null, body: RoomOp): Promise<RoomResponse & { token?: string; you?: string }> {
@@ -151,7 +210,7 @@ export async function operate(code: string, token: string | null, body: RoomOp):
     const fresh = newToken();
     const tokenHash = await hashToken(fresh);
     const id = randomId("d");
-    const { room, version } = await mutate(code, (r) => joinRoom(r, { id, name: body.nome, tokenHash }, Number(body.brasao) || 0));
+    const { room, version } = await mutate(code, (r, now) => joinRoom(r, { id, name: body.nome, tokenHash }, Number(body.brasao) || 0, now));
     return { ...respond(room!, version, id), token: fresh, you: id };
   }
 
@@ -173,11 +232,24 @@ export async function operate(code: string, token: string | null, body: RoomOp):
       case "ritmo":
         return setRitmo(r, me, body.ritmo);
       case "comecar":
-        return startGame(r, me, randomSeed(), now);
+        return startGame(r, me, randomSeed(), now, randomId("r"));
       case "saguao":
         return backToLobby(r, me);
       case "jogada":
-        return playMove(r, me, parseAction(body.acao), now);
+        return playMove(r, me, parseAction(body.acao), now, body.como ? String(body.como) : me);
+      case "chat-assento":
+        return addChatSeat(r, me, String(body.canal ?? ""));
+      case "chat": {
+        // O voto vencedor do chat vira jogada; se ela não valer, o Oráculo decide por ele.
+        const seat = r.seats.find((st) => st.chat?.controller === me);
+        if (!seat || !r.game) throw new GameError("Você não controla o assento do chat.");
+        try {
+          return playMove(r, me, chatAction(r.game, seat.id, typeof body.voto === "string" ? body.voto : null), now, seat.id);
+        } catch (err) {
+          if (!(err instanceof GameError)) throw err;
+          return playMove(r, me, botAction(r.game, seat.id), now, seat.id);
+        }
+      }
       case "relogio":
         return undefined;
       default:

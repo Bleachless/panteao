@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { use, useState } from "react";
 import { MAX_SEATS } from "@/game/room";
 import { useSession } from "@/lib/session";
+import { unlockAudio } from "@/lib/sfx";
 import { useRoom } from "@/lib/use-room";
 import { Sigil, SIGILS } from "../art";
 import { Table } from "../game/table";
@@ -50,8 +51,9 @@ export function RoomScreen({ params }: { params: Promise<{ code: string }> }) {
   if (!view.you && view.status === "saguao") {
     return view.seats.length >= MAX_SEATS ? <Message title="Sala cheia" text="Os seis tronos já estão ocupados." /> : <JoinForm code={code} send={send} busy={busy} error={error} host={view.seats.find((s) => s.id === view.hostId)?.name} />;
   }
-  if (view.status === "saguao") return <Lobby view={view} send={send} busy={busy} error={error} onLeave={leave} />;
-  return <Table view={view} skew={state.skew} play={play} send={send} busy={busy} error={error} onLeave={leave} />;
+  if (view.status === "saguao") return <Lobby view={view} skew={state.skew} send={send} busy={busy} error={error} onLeave={leave} />;
+  // Cada partida monta a mesa do zero (a crônica, as animações e a abertura recomeçam).
+  return <Table key={view.round} view={view} skew={state.skew} play={play} send={send} busy={busy} error={error} onLeave={leave} />;
 }
 
 function Message({ title, text }: { title: string; text: string }) {
@@ -81,6 +83,7 @@ function JoinForm({ code, send, busy, error, host }: { code: string; send: (b: R
           e.preventDefault();
           if (!name.trim()) return;
           useSession.getState().setProfile(name.trim(), sigil);
+          unlockAudio();
           void send({ op: "entrar", nome: name.trim(), brasao: sigil });
         }}
       >

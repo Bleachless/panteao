@@ -1,18 +1,19 @@
 "use client";
 
-import { Bot, DoorOpen, Loader2, Plus } from "lucide-react";
+import { Bot, DoorOpen, Loader2, Plus, Swords } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { isRoomCode } from "@/game/room";
-import { createRoom } from "@/lib/api";
+import { createRoom, joinArena } from "@/lib/api";
+import { unlockAudio } from "@/lib/sfx";
 import { useSession } from "@/lib/session";
 import { Sigil, SIGILS } from "../art";
 
-type Tab = "criar" | "treinar" | "entrar";
+type Tab = "arena" | "criar" | "treinar" | "entrar";
 
 export function StartPanel() {
   const router = useRouter();
-  const [tab, setTab] = useState<Tab>("criar");
+  const [tab, setTab] = useState<Tab>("arena");
   const [name, setName] = useState("");
   const [sigil, setSigil] = useState(0);
   const [bots, setBots] = useState(3);
@@ -31,6 +32,8 @@ export function StartPanel() {
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
+    // O clique destrava o áudio do navegador: a abertura da partida já pode tocar.
+    unlockAudio();
     const nome = name.trim();
     if (tab === "entrar") {
       const c = code.trim().toUpperCase();
@@ -43,7 +46,7 @@ export function StartPanel() {
     setBusy(true);
     try {
       useSession.getState().setProfile(nome, sigil);
-      const res = await createRoom({ nome, brasao: sigil, modo: tab === "treinar" ? "treino" : "sala", bots });
+      const res = tab === "arena" ? await joinArena({ nome, brasao: sigil }) : await createRoom({ nome, brasao: sigil, modo: tab === "treinar" ? "treino" : "sala", bots });
       useSession.getState().remember(res.code!, res.token!, res.you!);
       router.push(`/sala/${res.code}`);
     } catch (err) {
@@ -53,14 +56,15 @@ export function StartPanel() {
   }
 
   const tabs: { id: Tab; label: string; icon: typeof Plus }[] = [
-    { id: "criar", label: "Criar sala", icon: Plus },
+    { id: "arena", label: "Arena", icon: Swords },
+    { id: "criar", label: "Criar", icon: Plus },
     { id: "treinar", label: "Treinar", icon: Bot },
     { id: "entrar", label: "Entrar", icon: DoorOpen },
   ];
 
   return (
     <form onSubmit={submit} className="glass w-full max-w-md rounded-3xl p-5 shadow-2xl shadow-black/40 sm:p-6" aria-label="Começar a jogar">
-      <div className="grid grid-cols-3 gap-1 rounded-2xl bg-black/30 p-1" role="tablist">
+      <div className="grid grid-cols-4 gap-1 rounded-2xl bg-black/30 p-1" role="tablist">
         {tabs.map((t) => (
           <button
             key={t.id}
@@ -71,7 +75,7 @@ export function StartPanel() {
               setTab(t.id);
               setError(null);
             }}
-            className={`flex items-center justify-center gap-1.5 rounded-xl py-2 text-sm font-medium transition ${
+            className={`flex items-center justify-center gap-1.5 rounded-xl py-2 text-[13px] font-medium transition max-[380px]:gap-1 max-[380px]:text-xs ${
               tab === t.id ? "bg-gold/15 text-gold-hi shadow-inner shadow-gold/10" : "text-mute hover:text-ink"
             }`}
           >
@@ -158,10 +162,12 @@ export function StartPanel() {
 
       <button type="submit" disabled={busy} className="btn-gold mt-5 flex h-12 w-full items-center justify-center gap-2 rounded-xl font-display text-base font-bold tracking-wider">
         {busy && <Loader2 className="animate-spin" size={18} />}
-        {tab === "criar" ? "Abrir a sala" : tab === "treinar" ? "Descer à arena" : "Entrar na sala"}
+        {tab === "arena" ? "Jogar agora" : tab === "criar" ? "Abrir a sala" : tab === "treinar" ? "Descer à arena" : "Entrar na sala"}
       </button>
       <p className="mt-3 text-center text-xs text-faint">
-        {tab === "criar"
+        {tab === "arena"
+          ? "Mesa pública com quem estiver online. Em 20 segundos, bots completam as vagas."
+          : tab === "criar"
           ? "Você recebe um link para mandar no grupo. Até 6 deuses por mesa."
           : tab === "treinar"
             ? "Uma partida na hora contra bots, sem relógio."

@@ -1,15 +1,19 @@
 "use client";
 
 import { Check, Coins, Handshake, Heart, Hourglass, Loader2, Minus, MoonStar, Plus, ScrollText, Sparkle, Volume2, VolumeX, Wind, X } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { card, ELEMENT_LABEL } from "@/game/cards";
 import { blocks, damageFor, MAX_BOOSTERS, twilightDamage } from "@/game/engine";
 import type { RoomView } from "@/game/room";
 import type { CardDef, CardInst, GameAction, GameView, LogKind, PlayerView } from "@/game/types";
+import { narrate } from "@/game/narrator";
+import { playOpening, setIntensity, startMusic, stopMusic } from "@/lib/music";
 import { useSession } from "@/lib/session";
+import { silence, speak } from "@/lib/speech";
 import { play as playSound, setMuted, type SoundName, unlockAudio } from "@/lib/sfx";
 import { CardIcon, ELEMENT_COLOR, ELEMENT_ICON, Sigil } from "../art";
 import { CardFace } from "../card-face";
+import { ChatPanel } from "./chat-panel";
 import { AlchemyModal, GameMenu, Victory } from "./overlays";
 import { Floats, GuardianBadge, LogList, OpponentChip, StatusChips, TimerRing, useCountdown } from "./parts";
 
@@ -45,35 +49,120 @@ function useGameSounds(game: GameView, since: number) {
   useEffect(() => {
     const fresh = game.log.filter((l) => l.seq > played.current);
     played.current = game.log[game.log.length - 1]?.seq ?? played.current;
+    if (!muted && fresh.some((l) => l.kind === "info" && l.text.includes("descem à arena"))) playOpening();
     fresh.slice(-5).forEach((l, i) => {
       const name = SOUND_FOR[l.kind];
       if (name) window.setTimeout(() => playSound(name, l.amount), i * 150);
     });
-  }, [game.log]);
+  }, [game.log, muted]);
+
+  // A trilha de batalha: toca enquanto a partida corre e aperta no Crepúsculo e na Lua de Sangue.
+  const music = useSession((s) => s.music);
+  const over = game.phase.type === "fim";
+  const intense = twilightDamage(game.round) > 0 || !!game.phenomenon;
+  useEffect(() => {
+    if (!music || muted || over) return;
+    // Espera a abertura terminar antes de entrar com a trilha.
+    const id = window.setTimeout(startMusic, game.turn <= 1 ? 3200 : 300);
+    const start = () => startMusic();
+    window.addEventListener("pointerdown", start, { once: true });
+    return () => {
+      window.clearTimeout(id);
+      window.removeEventListener("pointerdown", start);
+      stopMusic();
+    };
+  }, [music, muted, over, game.turn]);
+  useEffect(() => setIntensity(intense ? 1 : 0), [intense]);
 }
 
-export function Table({ view, skew, play, send, busy, error, onLeave }: { view: RoomView; skew: number; play: Play; send: Send; busy: boolean; error: string | null; onLeave: () => void }) {
+/** O narrador: fala os lances grandes e mostra a legenda (bom para transmissão). */
+function useNarrator(game: GameView, since: number) {
+  const on = useSession((s) => s.narrator);
+  const muted = useSession((s) => s.muted);
+  const said = useRef(since);
+  const names = useMemo(() => Object.fromEntries(Object.values(game.players).map((p) => [p.id, p.name])), [game.players]);
+  const lines = game.log
+    .filter((l) => l.seq > since)
+    .map((l) => ({ seq: l.seq, text: narrate(l, names), big: l.kind === "vitoria" || l.kind === "prodigio" || l.kind === "queda" || (l.amount ?? 0) >= 12 }))
+    .filter((l): l is { seq: number; text: string; big: boolean } => !!l.text);
+  const latest = lines[lines.length - 1] ?? null;
+  useEffect(() => {
+    if (!latest || latest.seq <= said.current) return;
+    said.current = latest.seq;
+    if (on && !muted) speak(latest.text, latest.big);
+  }, [latest, on, muted]);
+  useEffect(() => () => silence(), []);
+  return on ? latest : null;
+}
+
+/** Tela larga (com a coluna da crônica)? Decide onde o painel do chat aparece, sem montar dois. */
+function useWide() {
+  return useSyncExternalStore(
+    (notify) => {
+      const mq = window.matchMedia("(min-width: 1024px)");
+      mq.addEventListener("change", notify);
+      return () => mq.removeEventListener("change", notify);
+    },
+    () => window.matchMedia("(min-width: 1024px)").matches,
+    () => true,
+  );
+}
+
+export function Table({
+  view,
+  skew,
+  play,
+  send,
+  busy,
+  error,
+  onLeave,
+  readOnly = false,
+  footer,
+}: {
+  view: RoomView;
+  skew: number;
+  play: Play;
+  send: Send;
+  busy: boolean;
+  error: string | null;
+  onLeave: () => void;
+  /** Replay: ninguém joga, só se assiste. */
+  readOnly?: boolean;
+  footer?: React.ReactNode;
+}) {
   const game = view.game!;
   // Abre uma "janela" no log: o que já tinha acontecido antes de abrir a tela não anima de novo.
-  const [since] = useState(() => game.log[game.log.length - 1]?.seq ?? 0);
+  // Numa partida que acabou de começar, a janela abre do zero para a abertura tocar.
+  const [since] = useState(() => (game.round === 1 && game.turn <= 1 ? 0 : (game.log[game.log.length - 1]?.seq ?? 0)));
   const [logOpen, setLogOpen] = useState(false);
   const phase = game.phase;
   // Cada nova decisão (vez, defesa, mercado, proposta) limpa a seleção da mão.
   const decisionKey = `${game.turn}:${phase.type}:${phase.type === "fim" ? "" : phase.player}:${phase.type === "defesa" ? phase.attack.reflected : ""}`;
   useGameSounds(game, since);
+  const caption = useNarrator(game, since);
+  const wide = useWide();
 
   return (
     <main className="mx-auto flex h-dvh max-w-7xl flex-col">
-      <TopBar view={view} onLog={() => setLogOpen(true)} play={play} onLeave={onLeave} />
+      <TopBar view={view} onLog={() => setLogOpen(true)} play={play} onLeave={onLeave} readOnly={readOnly} />
       <div className="flex min-h-0 flex-1">
         <div className="flex min-w-0 flex-1 flex-col">
-          <Board decisionKey={decisionKey} view={view} game={game} since={since} skew={skew} play={play} busy={busy} error={error} />
+          {view.controlled && !wide && (
+            <div className="px-3 pt-2">
+              <ChatPanel view={view} skew={skew} send={send} />
+            </div>
+          )}
+          <Board decisionKey={decisionKey} view={view} game={game} since={since} skew={skew} play={play} busy={busy} error={error} readOnly={readOnly} />
+          {footer}
         </div>
-        <aside className="glass m-3 ml-0 hidden w-72 flex-col rounded-2xl p-4 lg:flex">
+        <aside className="m-3 ml-0 hidden w-72 flex-col gap-3 lg:flex">
+          {view.controlled && wide && <ChatPanel view={view} skew={skew} send={send} />}
+          <div className="glass flex min-h-0 flex-1 flex-col rounded-2xl p-4">
           <h2 className="flex items-center gap-2 font-display text-sm font-bold uppercase tracking-[0.18em] text-gold">
             <ScrollText size={15} /> Crônica
           </h2>
           <LogList log={game.log} className="mt-2 min-h-0 flex-1" />
+          </div>
         </aside>
       </div>
       {logOpen && (
@@ -90,7 +179,12 @@ export function Table({ view, skew, play, send, busy, error, onLeave }: { view: 
         </div>
       )}
       <ProdigyFlash game={game} since={since} />
-      {phase.type === "fim" && <Victory view={view} send={send} busy={busy} onLeave={onLeave} />}
+      {caption && (
+        <div key={caption.seq} className="pointer-events-none fixed inset-x-0 top-[132px] z-30 flex animate-caption justify-center px-4 sm:top-[150px] lg:pr-80" aria-live="polite">
+          <p className="max-w-3xl rounded-2xl bg-night/80 px-4 py-2 text-center font-display text-lg font-extrabold text-gold-hi shadow-2xl backdrop-blur-sm sm:text-2xl">{caption.text}</p>
+        </div>
+      )}
+      {phase.type === "fim" && !readOnly && <Victory view={view} send={send} busy={busy} onLeave={onLeave} />}
     </main>
   );
 }
@@ -110,14 +204,14 @@ function ProdigyFlash({ game, since }: { game: GameView; since: number }) {
   );
 }
 
-function TopBar({ view, onLog, play, onLeave }: { view: RoomView; onLog: () => void; play: Play; onLeave: () => void }) {
+function TopBar({ view, onLog, play, onLeave, readOnly }: { view: RoomView; onLog: () => void; play: Play; onLeave: () => void; readOnly: boolean }) {
   const game = view.game!;
   const twilight = twilightDamage(game.round);
   const muted = useSession((s) => s.muted);
   return (
     <header className="flex items-center gap-1.5 whitespace-nowrap px-3 pt-3 sm:gap-3 sm:px-4">
       <span className="gold-text font-display text-lg font-extrabold tracking-[0.12em] max-[400px]:hidden">PANTEÃO</span>
-      <span className="rounded-md border border-white/10 px-2 py-0.5 font-display text-xs tracking-[0.2em] text-mute">{view.code}</span>
+      <span className="rounded-md border border-white/10 px-2 py-0.5 font-display text-xs tracking-[0.2em] text-mute">{readOnly ? "REPLAY" : view.mode === "arena" ? "ARENA" : view.code}</span>
       {game.phenomenon && (
         <span className="ml-auto inline-flex animate-pop items-center gap-1.5 rounded-full bg-fogo/20 px-3 py-1 text-xs font-semibold text-fogo" title="Lua de Sangue: todo golpe ganha +3">
           <MoonStar size={13} /> <span className="max-sm:hidden">Lua de Sangue · +3 até a volta {game.phenomenon.untilRound}</span>
@@ -145,19 +239,39 @@ function TopBar({ view, onLog, play, onLeave }: { view: RoomView; onLog: () => v
       <button type="button" onClick={onLog} className="rounded-full p-2 text-mute hover:text-ink lg:hidden" aria-label="Abrir crônica">
         <ScrollText size={18} />
       </button>
-      <GameMenu view={view} play={play} onLeave={onLeave} />
+      <GameMenu view={view} play={play} onLeave={onLeave} readOnly={readOnly} />
     </header>
   );
 }
 
 type Hand = { inst: CardInst; def: CardDef }[];
 
-function Board({ decisionKey, view, game, since, skew, play, busy, error }: { decisionKey: string; view: RoomView; game: GameView; since: number; skew: number; play: Play; busy: boolean; error: string | null }) {
+function Board({
+  decisionKey,
+  view,
+  game,
+  since,
+  skew,
+  play,
+  busy,
+  error,
+  readOnly,
+}: {
+  decisionKey: string;
+  view: RoomView;
+  game: GameView;
+  since: number;
+  skew: number;
+  play: Play;
+  busy: boolean;
+  error: string | null;
+  readOnly: boolean;
+}) {
   const you = view.you;
   const me = you ? game.players[you] : null;
   const phase = game.phase;
   const decider = phase.type === "fim" ? null : phase.player;
-  const myTurn = !!me?.alive && decider === you;
+  const myTurn = !readOnly && !!me?.alive && decider === you;
   const [selected, setSelected] = useState<string[]>([]);
   const [target, setTarget] = useState<string | null>(null);
   const [alchemy, setAlchemy] = useState<string | null>(null);
@@ -293,7 +407,12 @@ function Board({ decisionKey, view, game, since, skew, play, busy, error }: { de
     const special = picked.find((h) => h.def.reflect || h.def.evade);
     const sum = picked.reduce((s, h) => s + (h.def.defense ?? 0), 0);
     const damage = damageFor(attack, sum);
-    defenseInfo = { total: sum, damage, label: special ? (special.def.reflect ? "Devolver o golpe" : "Tentar esquivar (50%)") : picked.length ? `Defender · sofre ${damage}` : `Receber o golpe · ${damage}` };
+    const doomed = attack.lethal && sum === 0 && !special;
+    defenseInfo = {
+      total: sum,
+      damage,
+      label: special ? (special.def.reflect ? "Devolver o golpe" : "Tentar esquivar (50%)") : doomed ? "Receber a Sentença · cai na hora" : picked.length ? `Defender · sofre ${damage}` : `Receber o golpe · ${damage}`,
+    };
   }
 
   return (
@@ -318,7 +437,7 @@ function Board({ decisionKey, view, game, since, skew, play, busy, error }: { de
 
       {/* Arena */}
       <section className="scrollbar-none flex min-h-0 flex-1 flex-col items-center justify-center-safe overflow-y-auto px-3 py-2 text-center" aria-live="polite">
-        <Arena view={view} game={game} me={me} seconds={seconds} total={total} play={act} busy={busy} />
+        <Arena view={view} game={game} me={readOnly ? null : me} seconds={seconds} total={total} play={act} busy={busy} />
       </section>
 
       {/* Eu */}
@@ -340,7 +459,8 @@ function Board({ decisionKey, view, game, since, skew, play, busy, error }: { de
             )}
           </div>
 
-          <div className="scrollbar-none -mx-3 mt-2 flex gap-2 overflow-x-auto px-3 pb-1 pt-4 sm:-mx-4 sm:px-4">
+          {/* No celular a mão rola para o lado; no computador as cartas se sobrepõem em leque e todas cabem. */}
+          <div className="scrollbar-none -mx-3 mt-2 flex gap-2 overflow-x-auto px-3 pb-1 pt-4 sm:-mx-4 sm:gap-1.5 sm:overflow-visible sm:px-4 sm:pr-[110px]">
             {hand.map((h) => {
               const can = playable(h);
               return (
@@ -352,7 +472,7 @@ function Board({ decisionKey, view, game, since, skew, play, busy, error }: { de
                   aria-pressed={selected.includes(h.inst.uid)}
                   aria-label={`${h.def.name}: ${h.def.text}`}
                   data-card={h.def.id}
-                  className="shrink-0 animate-rise focus-visible:outline-none"
+                  className="relative shrink-0 animate-rise transition-[transform] hover:z-20 focus-visible:z-20 focus-visible:outline-none sm:min-w-0 sm:max-w-[104px] sm:shrink sm:basis-[104px] sm:hover:-translate-y-2 aria-pressed:z-10"
                 >
                   <CardFace id={h.def.id} size="md" className="max-sm:h-[118px] max-sm:w-[84px]" selected={selected.includes(h.inst.uid)} disabled={myTurn && !can} highlight={myTurn && phase.type === "defesa" && can} />
                 </button>

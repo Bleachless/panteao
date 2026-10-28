@@ -13,7 +13,7 @@
 ![Tailwind CSS](https://img.shields.io/badge/Tailwind_4-0b1030?style=flat-square&logo=tailwindcss&logoColor=38bdf8)
 ![Ably](https://img.shields.io/badge/Ably-0b1030?style=flat-square&logo=ably&logoColor=ff5416)
 ![Upstash](https://img.shields.io/badge/Upstash_Redis-0b1030?style=flat-square&logo=upstash&logoColor=00e9a3)
-![Vitest](https://img.shields.io/badge/80_testes-0b1030?style=flat-square&logo=vitest&logoColor=d8f347)
+![Vitest](https://img.shields.io/badge/92_testes-0b1030?style=flat-square&logo=vitest&logoColor=d8f347)
 
 **Um jogo de cartas por turnos para até 6 deuses, direto no navegador.**
 <br />
@@ -41,6 +41,11 @@ Abre a sala, manda o link no grupo e joga, no computador ou no celular. **Sem ca
 ## ✨ O que ele tem
 
 - **Multiplayer de verdade, em tempo real.** Até 6 pessoas por sala, cada uma no seu aparelho. Entrou pelo link, escolheu nome e brasão, sentou à mesa.
+- **Arena pública.** "Jogar agora" coloca você numa mesa com quem estiver online; em 20 segundos (ou quando alguém apressa), bots completam as vagas e a partida começa sozinha.
+- **Replay de qualquer partida por link.** No fim, "Ver o replay" abre a partida inteira lance por lance, com velocidade, linha do tempo e a mão de qualquer deus.
+- **O chat da Twitch é um deus.** Quem transmite senta o chat como jogador; a cada decisão, o chat vota com `!atacar vortice`, `!orar`, `!defender` ou `!2`, e o mais votado vira jogada de verdade.
+- **Narrador.** Um locutor fala os lances grandes ("É A HORA ZERO! TODO MUNDO COM UM DE VIDA, MINHA GENTE!") e mostra a legenda na tela.
+- **Trilha de batalha.** Abertura com tambores, metais e gongo quando a partida começa, e uma trilha épica que aperta no Crepúsculo e na Lua de Sangue.
 - **Bots para treinar.** Uma partida na hora contra 1 a 5 bots, ou bots para completar a mesa dos amigos. Eles jogam só com o que veriam: a própria mão e a mesa.
 - **62 relíquias originais** em sete tipos: armas, reforços, defesas, milagres, itens, trocas e prodígios. Todas no [Códice](https://panteao.joaovaz.dev/codice).
 - **Guardiões.** Quebre uma Ânfora Selada e um Grifo Dourado, um Golem de Bronze ou uma Serpente das Sombras passa a lutar ao seu lado, agindo sozinho a cada vez sua. Golpes em área também os ferem, e o Banimento manda embora.
@@ -62,6 +67,23 @@ Abre a sala, manda o link no grupo e joga, no computador ou no celular. **Sem ca
 <img src="docs/vitoria.png" alt="Fim de partida: o vencedor com a coroa, o ranking de quem caiu por último e o botão de revanche" width="100%" />
 
 <img src="docs/codice.png" alt="O Códice com as armas: cada carta com seu golpe, elemento, constelação e uma frase" width="100%" />
+
+## 🏟️ Arena, replays e o chat da Twitch
+
+<img src="docs/replay.png" alt="Replay de uma partida da Arena: a mesa no meio da partida, a mão de Aurélia em leque e os controles de tocar, voltar, velocidade e linha do tempo" width="100%" />
+
+<table>
+  <tr>
+    <td align="center" width="62%"><img src="docs/chat-votando.png" alt="O chat da Twitch decidindo uma defesa: o painel com os comandos !defender e !receber, a contagem de votos e a mão do chat" /><br /><sub><b>O chat da Twitch joga</b><br />cada decisão é uma votação de 15 segundos</sub></td>
+    <td align="center" width="38%"><img src="docs/arena-celular.png" alt="Saguão da Arena no celular com a contagem regressiva e os deuses chegando" /><br /><sub><b>Arena</b><br />mesa pública que começa sozinha</sub></td>
+  </tr>
+</table>
+
+<img src="docs/narrador.png" alt="O narrador anunciando a Sentença do Tártaro com legenda na tela durante a partida" width="100%" />
+
+- **Replays sem guardar a partida inteira.** O motor é determinístico: a semente e a lista de jogadas reconstroem cada estado, e o navegador refaz a partida com o mesmo código que roda no servidor. Um replay inteiro tem poucos KB.
+- **O chat lido direto do navegador.** O painel conecta no IRC público da Twitch como visitante anônimo (só leitura, sem login), conta um voto por pessoa e manda o vencedor. Os detalhes (qual arma, quais defesas) ficam com a mesma cabeça dos bots. Há um campo para testar comandos sem estar ao vivo.
+- **Narrador e trilha também são código.** A voz é a síntese de fala do navegador em português; a trilha é um sequenciador em Web Audio com taiko, baixo, cordas, coro e reverb de catedral, em ré menor.
 
 ## 🌌 Quando a mesa vira
 
@@ -142,17 +164,22 @@ src/
 │   ├── page.tsx               # início: criar sala, treinar ou entrar com código
 │   ├── codice/                # todas as cartas e as regras
 │   ├── sala/[code]/           # saguão e mesa
-│   └── api/salas/             # criar, ler, jogar e os avisos por SSE; api/ably dá o token
+│   ├── replay/[id]/           # o replay, reconstruído no navegador
+│   └── api/                   # salas (criar, ler, jogar, avisos por SSE), arena, replays e o token do Ably
 ├── game/
 │   ├── cards.ts               # as 62 relíquias e os 7 guardiões
 │   ├── engine.ts              # turnos, golpes, defesas, mazelas, Crepúsculo, vitória
 │   ├── bot.ts                 # a cabeça dos bots
-│   └── room.ts                # saguão, assentos, revanche e o relógio
+│   ├── chat.ts                # comandos e votos do chat da Twitch
+│   ├── narrator.ts            # as falas do narrador
+│   └── room.ts                # saguão, Arena, assentos, revanche, relógio e a gravação dos replays
 ├── server/                    # store (memória ou Redis), avisos (SSE ou Ably) e a ponte com o jogo
 ├── components/                # cartas, brasões, mesa, saguão
 └── lib/
     ├── use-room.ts            # mantém a sala em dia no navegador
-    └── sfx.ts                 # os sons, sintetizados com Web Audio
+    ├── sfx.ts music.ts        # os sons e a trilha de batalha, sintetizados com Web Audio
+    ├── speech.ts              # a voz do narrador
+    └── twitch.ts              # o chat da Twitch pelo IRC em WebSocket
 ```
 
 ## 🧪 Testes
@@ -161,7 +188,9 @@ src/
 npm test
 ```
 
-80 testes cobrem o motor (dano e defesa, cada elemento, Abismo em dobro, Luz indefensável, reforços que trocam o elemento, Espelho que devolve o golpe, esquiva, golpes em área na ordem da mesa, veneno, sono, silêncio, milagres que voltam para a mão, mercado, penhor, alquimia, escambo aceito e recusado, guardiões atacando, curando e segurando dano, a Sentença do Tártaro, a Graça e a Danação, cada prodígio, os milagres caros, voltas, Crepúsculo, desistência e vitória), a visão de cada jogador (nada da mão alheia vaza), o saguão e o relógio da sala. Um teste joga **150 partidas inteiras só entre bots** e confere que nenhuma jogada deles é inválida e que todas terminam.
+92 testes cobrem o motor (dano e defesa, cada elemento, Abismo em dobro, Luz indefensável, reforços que trocam o elemento, Espelho que devolve o golpe, esquiva, golpes em área na ordem da mesa, veneno, sono, silêncio, milagres que voltam para a mão, mercado, penhor, alquimia, escambo aceito e recusado, guardiões atacando, curando e segurando dano, a Sentença do Tártaro, a Graça e a Danação, cada prodígio, os milagres caros, voltas, Crepúsculo, desistência e vitória), a visão de cada jogador (nada da mão alheia vaza), o saguão e o relógio da sala, a Arena começando sozinha, o replay que reconstrói a partida idêntica, o assento do chat (comandos sem acento, por número, votação e a jogada que sai dela) e as falas do narrador. Um teste joga **150 partidas inteiras só entre bots** e confere que nenhuma jogada deles é inválida e que todas terminam.
+
+Outro roteiro coloca duas pessoas (computador e celular) na mesma mesa da Arena, joga até o fim com o narrador ligado, abre o replay pela tela de vitória e confere que ele termina com o mesmo vencedor; depois um "streamer" senta o chat da Twitch e o chat decide duas jogadas por votação.
 
 Além disso, um roteiro de ponta a ponta com **Playwright** abre três navegadores independentes, um deles no tamanho de um celular: cria a sala, entra pelo link, vê o saguão se atualizar sozinho nas três abas, adiciona um bot, joga uma partida inteira pela interface (atacando, defendendo e orando), confere que todos veem o mesmo vencedor, chama a revanche e testa a saída no meio da partida.
 

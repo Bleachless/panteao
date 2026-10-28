@@ -1,6 +1,6 @@
 import "server-only";
 import { Redis } from "@upstash/redis";
-import type { Room } from "@/game/room";
+import type { Replay, Room } from "@/game/room";
 
 // Onde as salas moram. Em produção, no Upstash Redis; no computador (e nos testes de ponta a ponta), na memória.
 // Toda gravação confere a versão lida antes (compare-and-set), então duas jogadas ao mesmo tempo nunca se atropelam.
@@ -15,9 +15,17 @@ export interface RoomStore {
   /** Grava se a versão atual ainda for `expected` (0 = sala nova). Devolve a nova versão ou null se perdeu a corrida. */
   save(code: string, room: Room, expected: number): Promise<number | null>;
   remove(code: string): Promise<void>;
+  saveReplay(replay: Replay): Promise<void>;
+  loadReplay(id: string): Promise<Replay | null>;
+  /** Mesas da Arena esperando gente. */
+  arenaAdd(code: string): Promise<void>;
+  arenaRemove(code: string): Promise<void>;
+  arenaList(): Promise<string[]>;
 }
 
 const TTL_SECONDS = 60 * 60 * 12;
+/** Replays ficam 30 dias. */
+const REPLAY_TTL_SECONDS = 60 * 60 * 24 * 30;
 
 class MemoryStore implements RoomStore {
   private rooms = new Map<string, { json: string; version: number; expires: number }>();
@@ -38,6 +46,30 @@ class MemoryStore implements RoomStore {
 
   async remove(code: string) {
     this.rooms.delete(code);
+  }
+
+  private replays = new Map<string, string>();
+  private arena = new Set<string>();
+
+  async saveReplay(replay: Replay) {
+    this.replays.set(replay.id, JSON.stringify(replay));
+  }
+
+  async loadReplay(id: string) {
+    const json = this.replays.get(id);
+    return json ? (JSON.parse(json) as Replay) : null;
+  }
+
+  async arenaAdd(code: string) {
+    this.arena.add(code);
+  }
+
+  async arenaRemove(code: string) {
+    this.arena.delete(code);
+  }
+
+  async arenaList() {
+    return [...this.arena];
   }
 }
 
@@ -70,6 +102,27 @@ class RedisStore implements RoomStore {
 
   async remove(code: string) {
     await this.redis.del(...this.keys(code));
+  }
+
+  async saveReplay(replay: Replay) {
+    await this.redis.set(`panteao:replay:${replay.id}`, JSON.stringify(replay), { ex: REPLAY_TTL_SECONDS });
+  }
+
+  async loadReplay(id: string) {
+    const json = await this.redis.get<string>(`panteao:replay:${id}`);
+    return json ? (JSON.parse(json) as Replay) : null;
+  }
+
+  async arenaAdd(code: string) {
+    await this.redis.sadd("panteao:arena", code);
+  }
+
+  async arenaRemove(code: string) {
+    await this.redis.srem("panteao:arena", code);
+  }
+
+  async arenaList() {
+    return this.redis.smembers("panteao:arena");
   }
 }
 

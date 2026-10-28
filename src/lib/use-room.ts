@@ -112,7 +112,9 @@ export function useRoom(code: string) {
   }, [code, realtime, refresh]);
 
   // Relógio: quando a decisão atual vence, uma leitura faz o servidor andar com a mesa.
-  const deadline = state.status === "pronto" ? state.data.view.game?.deadline ?? null : null;
+  // No saguão da Arena, o "prazo" é a hora de começar sozinho.
+  const view = state.status === "pronto" ? state.data.view : null;
+  const deadline = view ? (view.game && view.status === "jogo" ? view.game.deadline : view.status === "saguao" ? view.startsAt : null) : null;
   const skew = state.status === "pronto" ? state.skew : 0;
   useEffect(() => {
     if (!deadline) return;

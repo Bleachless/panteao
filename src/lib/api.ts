@@ -38,6 +38,10 @@ export function createRoom(body: { nome: string; brasao: number; modo: "sala" | 
   return call("/api/salas", { method: "POST", body: JSON.stringify(body) });
 }
 
+export function joinArena(body: { nome: string; brasao: number }) {
+  return call("/api/arena", { method: "POST", body: JSON.stringify(body) });
+}
+
 export function fetchRoom(code: string) {
   return call(`/api/salas/${code}`, { code });
 }

@@ -1,8 +1,12 @@
 "use client";
 
-import { BookOpen, Crown, Flag, LogOut, Menu, Minus, Plus, RotateCcw, Users, X } from "lucide-react";
+import { BookOpen, Check, Crown, Flag, Film, Link2, LogOut, Menu, Mic, MicOff, Minus, Music, Plus, RotateCcw, Swords, Users, X } from "lucide-react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { joinArena } from "@/lib/api";
+import { useSession } from "@/lib/session";
+import { unlockAudio } from "@/lib/sfx";
 import type { RoomView } from "@/game/room";
 import type { GameAction, PlayerView } from "@/game/types";
 import { Sigil } from "../art";
@@ -48,8 +52,12 @@ export function Victory({ view, send, busy, onLeave }: { view: RoomView; send: (
           ))}
         </ol>
 
-        <div className="mt-6 grid gap-2">
-          {host ? (
+        {view.replayId && <ReplayLink id={view.replayId} />}
+
+        <div className="mt-4 grid gap-2">
+          {view.mode === "arena" ? (
+            <ArenaAgain />
+          ) : host ? (
             <>
               <button type="button" disabled={busy} onClick={() => send({ op: "comecar" })} className="btn-gold flex h-12 items-center justify-center gap-2 rounded-xl font-display font-bold">
                 <RotateCcw size={17} /> Revanche
@@ -67,6 +75,56 @@ export function Victory({ view, send, busy, onLeave }: { view: RoomView; send: (
         </div>
       </div>
     </div>
+  );
+}
+
+function ReplayLink({ id }: { id: string }) {
+  const [copied, setCopied] = useState(false);
+  const href = `/replay/${id}`;
+  return (
+    <div className="mt-5 flex gap-2">
+      <Link href={href} target="_blank" className="flex h-10 flex-1 items-center justify-center gap-2 rounded-xl border border-white/10 text-sm text-ink hover:bg-white/5">
+        <Film size={15} /> Ver o replay
+      </Link>
+      <button
+        type="button"
+        onClick={async () => {
+          await navigator.clipboard.writeText(`${window.location.origin}${href}`);
+          setCopied(true);
+        }}
+        className="flex h-10 items-center justify-center gap-2 rounded-xl border border-white/10 px-3 text-sm text-mute hover:text-ink"
+        aria-label="Copiar o link do replay"
+      >
+        {copied ? <Check size={15} /> : <Link2 size={15} />} {copied ? "Copiado" : "Link"}
+      </button>
+    </div>
+  );
+}
+
+/** Na Arena, a revanche é voltar para a fila e cair na próxima mesa. */
+function ArenaAgain() {
+  const router = useRouter();
+  const [busy, setBusy] = useState(false);
+  return (
+    <button
+      type="button"
+      disabled={busy}
+      onClick={async () => {
+        setBusy(true);
+        unlockAudio();
+        const { name, sigil } = useSession.getState();
+        try {
+          const res = await joinArena({ nome: name || "Deus sem nome", brasao: sigil });
+          useSession.getState().remember(res.code!, res.token!, res.you!);
+          router.push(`/sala/${res.code}`);
+        } catch {
+          setBusy(false);
+        }
+      }}
+      className="btn-gold flex h-12 items-center justify-center gap-2 rounded-xl font-display font-bold"
+    >
+      <Swords size={17} /> Jogar de novo na Arena
+    </button>
   );
 }
 
@@ -125,10 +183,12 @@ export function AlchemyModal({ me, onClose, onConfirm, busy }: { me: PlayerView;
   );
 }
 
-export function GameMenu({ view, play, onLeave }: { view: RoomView; play: (a: GameAction) => Promise<unknown>; onLeave: () => void }) {
+export function GameMenu({ view, play, onLeave, readOnly = false }: { view: RoomView; play: (a: GameAction) => Promise<unknown>; onLeave: () => void; readOnly?: boolean }) {
   const [open, setOpen] = useState(false);
+  const music = useSession((s) => s.music);
+  const narrator = useSession((s) => s.narrator);
   const me = view.you ? view.game?.players[view.you] : null;
-  const canForfeit = !!me?.alive && view.game?.phase.type !== "fim";
+  const canForfeit = !readOnly && !!me?.alive && view.game?.phase.type !== "fim";
   return (
     <div className="relative">
       <button type="button" onClick={() => setOpen(!open)} className="rounded-full p-2 text-mute hover:text-ink" aria-label="Menu" aria-expanded={open}>
@@ -138,6 +198,12 @@ export function GameMenu({ view, play, onLeave }: { view: RoomView; play: (a: Ga
         <>
           <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
           <div className="glass absolute right-0 top-11 z-50 w-56 animate-pop rounded-2xl bg-night/90 p-2 text-sm">
+            <button type="button" onClick={() => useSession.getState().toggleMusic()} className="flex w-full items-center gap-2 rounded-xl px-3 py-2.5 text-left hover:bg-white/5" aria-pressed={music}>
+              <Music size={15} /> Trilha de batalha: {music ? "ligada" : "desligada"}
+            </button>
+            <button type="button" onClick={() => useSession.getState().toggleNarrator()} className="flex w-full items-center gap-2 rounded-xl px-3 py-2.5 text-left hover:bg-white/5" aria-pressed={narrator}>
+              {narrator ? <Mic size={15} /> : <MicOff size={15} />} Narrador: {narrator ? "ligado" : "desligado"}
+            </button>
             <Link href="/codice" target="_blank" className="flex items-center gap-2 rounded-xl px-3 py-2.5 hover:bg-white/5">
               <BookOpen size={15} /> Códice e regras
             </Link>
@@ -161,7 +227,7 @@ export function GameMenu({ view, play, onLeave }: { view: RoomView; play: (a: Ga
               }}
               className="flex w-full items-center gap-2 rounded-xl px-3 py-2.5 text-left hover:bg-white/5"
             >
-              <LogOut size={15} /> Sair da sala
+              <LogOut size={15} /> {readOnly ? "Voltar ao início" : "Sair da sala"}
             </button>
           </div>
         </>

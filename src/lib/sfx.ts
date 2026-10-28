@@ -29,6 +29,15 @@ export function unlockAudio() {
   audio();
 }
 
+/** O mesmo contexto de áudio, para a trilha de batalha. */
+export function audioContext(): AudioContext | null {
+  return audio();
+}
+
+export function isMuted() {
+  return muted;
+}
+
 function tone(freq: number, at: number, dur: number, opts: { type?: OscillatorType; vol?: number; to?: number; attack?: number } = {}) {
   const c = audio();
   if (!c || !master) return;
@@ -126,6 +135,37 @@ const SOUNDS = {
   turno: () => {
     tone(880, 0, 0.5, { vol: 0.12 });
     tone(1320, 0.09, 0.6, { vol: 0.09 });
+  },
+  /** A torcida: ruído filtrado subindo e caindo, com uma ondulação de muitas vozes. */
+  torcida: () => {
+    const c = audio();
+    if (!c || !master) return;
+    const t = c.currentTime;
+    const dur = 2.6;
+    const buffer = c.createBuffer(1, Math.ceil(c.sampleRate * dur), c.sampleRate);
+    const data = buffer.getChannelData(0);
+    for (let i = 0; i < data.length; i++) data[i] = Math.random() * 2 - 1;
+    const src = c.createBufferSource();
+    src.buffer = buffer;
+    const band = c.createBiquadFilter();
+    band.type = "bandpass";
+    band.frequency.value = 900;
+    band.Q.value = 0.6;
+    const wobble = c.createGain();
+    const lfo = c.createOscillator();
+    lfo.frequency.value = 7;
+    const lfoGain = c.createGain();
+    lfoGain.gain.value = 0.25;
+    lfo.connect(lfoGain).connect(wobble.gain);
+    const gain = c.createGain();
+    gain.gain.setValueAtTime(0.0001, t);
+    gain.gain.exponentialRampToValueAtTime(0.22, t + 0.5);
+    gain.gain.setValueAtTime(0.22, t + 1.3);
+    gain.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    src.connect(band).connect(wobble).connect(gain).connect(master);
+    src.start(t);
+    lfo.start(t);
+    lfo.stop(t + dur);
   },
   /** Relógio apertando. */
   tick: () => tone(1500, 0, 0.04, { type: "square", vol: 0.03 }),

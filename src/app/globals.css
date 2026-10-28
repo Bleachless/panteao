@@ -31,6 +31,25 @@
   --animate-pop: pop 0.35s cubic-bezier(0.2, 0.9, 0.3, 1.4) both;
   --animate-twinkle: twinkle 6s ease-in-out infinite;
   --animate-prodigy: prodigy 2.8s ease-out forwards;
+  --animate-caption: caption 3.6s ease-out forwards;
+}
+
+@keyframes caption {
+  0% {
+    opacity: 0;
+    transform: translateY(12px) scale(0.96);
+  }
+  10% {
+    opacity: 1;
+    transform: none;
+  }
+  80% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    visibility: hidden;
+  }
 }
 
 @keyframes prodigy {

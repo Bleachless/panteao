@@ -1,14 +1,82 @@
 "use client";
 
-import { Bot, Check, Copy, Crown, Loader2, LogOut, Play, Share2, Timer, UserPlus, X } from "lucide-react";
+import { Bot, Check, Copy, Crown, Loader2, LogOut, Play, Radio, Share2, Swords, Timer, UserPlus, X } from "lucide-react";
 import QRCode from "qrcode";
 import { useEffect, useState } from "react";
 import { MAX_SEATS, RITMOS, type Ritmo, type RoomView } from "@/game/room";
+import { unlockAudio } from "@/lib/sfx";
 import { Sigil } from "../art";
+import { TimerRing, useCountdown } from "../game/parts";
 import { Logo } from "../shell";
 
-export function Lobby({ view, send, busy, error, onLeave }: { view: RoomView; send: (b: Record<string, unknown>) => Promise<unknown>; busy: boolean; error: string | null; onLeave: () => void }) {
+type LobbyProps = { view: RoomView; skew: number; send: (b: Record<string, unknown>) => Promise<unknown>; busy: boolean; error: string | null; onLeave: () => void };
+
+export function Lobby(props: LobbyProps) {
+  return props.view.mode === "arena" ? <ArenaLobby {...props} /> : <RoomLobby {...props} />;
+}
+
+/** A Arena: a mesa se monta sozinha e começa quando o relógio zera (ou quando alguém apressa). */
+function ArenaLobby({ view, skew, send, busy, error, onLeave }: LobbyProps) {
+  const seconds = useCountdown(view.startsAt, skew) ?? 0;
+  const empty = Math.max(0, MAX_SEATS - view.seats.length);
+  return (
+    <main className="mx-auto max-w-xl px-5 py-5">
+      <header className="flex items-center justify-between">
+        <Logo />
+        <button type="button" onClick={onLeave} className="flex items-center gap-2 rounded-full px-3 py-2 text-sm text-mute hover:text-ink">
+          <LogOut size={15} /> Sair
+        </button>
+      </header>
+      <section className="glass mt-8 rounded-3xl p-6 text-center" aria-label="Arena">
+        <Swords className="mx-auto text-gold" size={30} strokeWidth={1.5} />
+        <h1 className="mt-2 font-display text-3xl font-bold">Arena</h1>
+        <p className="mt-1 text-sm text-mute">Mesa pública. Quem entrar agora joga junto; bots completam as vagas.</p>
+        <div className="mt-6 flex flex-col items-center gap-2" data-testid="arena-relogio">
+          <TimerRing seconds={seconds} total={20} size={84} />
+          <span className="text-sm text-mute">{seconds > 0 ? "a partida começa em instantes" : "descendo à arena…"}</span>
+        </div>
+        <ul className="mt-6 grid gap-2 text-left sm:grid-cols-2" data-testid="assentos">
+          {view.seats.map((s) => (
+            <li key={s.id} className="flex animate-rise items-center gap-3 rounded-2xl bg-white/5 px-3 py-2.5">
+              <Sigil sigil={s.sigil} size={34} />
+              <span className="truncate font-semibold">{s.name}</span>
+              {s.id === view.you && <span className="text-xs text-faint">(você)</span>}
+            </li>
+          ))}
+          {Array.from({ length: empty }, (_, i) => (
+            <li key={`vazio-${i}`} className="flex items-center gap-3 rounded-2xl border border-dashed border-white/10 px-3 py-2.5 text-sm text-faint">
+              <span className="grid h-[34px] w-[34px] place-items-center rounded-full border border-dashed border-white/15">
+                <Loader2 size={14} className="animate-spin" />
+              </span>
+              procurando deus…
+            </li>
+          ))}
+        </ul>
+        <button
+          type="button"
+          disabled={busy}
+          onClick={() => {
+            unlockAudio();
+            void send({ op: "comecar" });
+          }}
+          className="btn-gold mt-6 flex h-12 w-full items-center justify-center gap-2 rounded-xl font-display font-bold"
+        >
+          <Play size={17} fill="currentColor" /> Começar agora
+        </button>
+        {error && (
+          <p role="alert" className="mt-4 rounded-xl border border-vida/30 bg-vida/10 px-3 py-2 text-sm text-vida">
+            {error}
+          </p>
+        )}
+      </section>
+    </main>
+  );
+}
+
+function RoomLobby({ view, send, busy, error, onLeave }: LobbyProps) {
   const host = view.hostId === view.you;
+  const [channel, setChannel] = useState("");
+
   const [url, setUrl] = useState("");
   const [qr, setQr] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
@@ -97,6 +165,11 @@ export function Lobby({ view, send, busy, error, onLeave }: { view: RoomView; se
                         <Bot size={11} /> bot
                       </>
                     )}
+                    {s.chat && (
+                      <>
+                        <Radio size={11} className="text-vida" /> chat da Twitch
+                      </>
+                    )}
                     {(view.wins[s.id] ?? 0) > 0 && <span className="ml-1 text-gold">★ {view.wins[s.id]}</span>}
                   </div>
                 </div>
@@ -149,7 +222,10 @@ export function Lobby({ view, send, busy, error, onLeave }: { view: RoomView; se
                 <button
                   type="button"
                   disabled={busy || view.seats.length < 2}
-                  onClick={() => send({ op: "comecar" })}
+                  onClick={() => {
+                    unlockAudio();
+                    void send({ op: "comecar" });
+                  }}
                   className="btn-gold flex h-12 flex-1 items-center justify-center gap-2 rounded-xl font-display font-bold tracking-wide"
                 >
                   {busy ? <Loader2 size={17} className="animate-spin" /> : <Play size={17} fill="currentColor" />}
@@ -157,6 +233,32 @@ export function Lobby({ view, send, busy, error, onLeave }: { view: RoomView; se
                 </button>
               </div>
               {view.seats.length < 2 && <p className="text-sm text-faint">Chame alguém pelo link ou adicione um bot para começar.</p>}
+              {!view.seats.some((s) => s.chat) && (
+                <form
+                  className="rounded-2xl border border-white/10 p-3"
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    if (channel.trim()) void send({ op: "chat-assento", canal: channel.trim() });
+                  }}
+                >
+                  <label htmlFor="canal" className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-[0.18em] text-mute">
+                    <Radio size={13} className="text-vida" /> O chat da Twitch joga
+                  </label>
+                  <p className="mt-1 text-xs text-faint">Um deus a mais, controlado pelos votos do seu chat: !atacar, !orar, !defender…</p>
+                  <div className="mt-2 flex gap-2">
+                    <input
+                      id="canal"
+                      value={channel}
+                      onChange={(e) => setChannel(e.target.value)}
+                      placeholder="seu canal"
+                      className="h-10 min-w-0 flex-1 rounded-xl border border-white/10 bg-black/30 px-3 text-sm outline-none focus:border-gold/60"
+                    />
+                    <button type="submit" disabled={busy || empty === 0 || !channel.trim()} className="h-10 rounded-xl border border-gold/30 px-3 text-sm text-gold-hi hover:bg-gold/10 disabled:opacity-40">
+                      Sentar o chat
+                    </button>
+                  </div>
+                </form>
+              )}
             </div>
           ) : (
             <p className="mt-6 flex items-center gap-2 text-sm text-mute">

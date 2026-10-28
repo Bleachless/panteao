@@ -9,9 +9,13 @@ interface Session {
   name: string;
   sigil: number;
   muted: boolean;
+  narrator: boolean;
+  music: boolean;
   seats: Record<string, { token: string; you: string; at: number }>;
   setProfile: (name: string, sigil: number) => void;
   toggleMuted: () => void;
+  toggleNarrator: () => void;
+  toggleMusic: () => void;
   remember: (code: string, token: string, you: string) => void;
   forget: (code: string) => void;
 }
@@ -22,9 +26,13 @@ export const useSession = create<Session>()(
       name: "",
       sigil: 0,
       muted: false,
+      narrator: false,
+      music: true,
       seats: {},
       setProfile: (name, sigil) => set({ name, sigil }),
       toggleMuted: () => set((s) => ({ muted: !s.muted })),
+      toggleNarrator: () => set((s) => ({ narrator: !s.narrator })),
+      toggleMusic: () => set((s) => ({ music: !s.music })),
       remember: (code, token, you) =>
         set((s) => {
           // Guarda só as 20 salas mais recentes.

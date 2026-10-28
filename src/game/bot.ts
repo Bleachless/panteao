@@ -32,7 +32,7 @@ function pickTarget(s: GameState, me: string): PlayerState {
   }, opp[0]);
 }
 
-function heal(s: GameState, p: PlayerState, hand: Hand): GameAction | null {
+export function heal(s: GameState, p: PlayerState, hand: Hand = handOf(p)): GameAction | null {
   const silenced = p.statuses.some((st) => st.id === "silencio");
   const options = hand.filter(({ def }) => {
     const fx = def.effect?.type;
@@ -46,13 +46,13 @@ function heal(s: GameState, p: PlayerState, hand: Hand): GameAction | null {
   return { type: "usar", card: pick.inst.uid };
 }
 
-function attackPlan(s: GameState, p: PlayerState, hand: Hand): GameAction | null {
+export function attackPlan(s: GameState, p: PlayerState, hand: Hand = handOf(p), forced?: PlayerState): GameAction | null {
   const weapons = hand.filter((h) => h.def.kind === "arma");
   const silenced = p.statuses.some((st) => st.id === "silencio");
   const spells = hand.filter((h) => h.def.effect?.type === "ataque" && !silenced && p.fe >= (h.def.cost ?? 0) + 2);
   if (weapons.length === 0 && spells.length === 0) return null;
 
-  const target = pickTarget(s, p.id);
+  const target = forced ?? pickTarget(s, p.id);
   // Golpes que a mesa não consegue segurar com facilidade valem mais.
   const value = (def: CardDef, power: number) => {
     const elementBonus = def.element === "luz" ? 3 : def.element === "abismo" ? 4 : def.element === "neutro" ? 0 : 1.5;
@@ -156,7 +156,7 @@ function utility(s: GameState, p: PlayerState, hand: Hand): GameAction | null {
   return null;
 }
 
-function defense(s: GameState, p: PlayerState, attack: PendingAttack): GameAction {
+export function defense(s: GameState, p: PlayerState, attack: PendingAttack): GameAction {
   const usable = handOf(p).filter((h) => blocks(h.def, attack.element));
   const plain = usable.filter((h) => !h.def.reflect && !h.def.evade).sort((a, b) => (b.def.defense ?? 0) - (a.def.defense ?? 0));
   const raw = damageFor(attack, 0);
